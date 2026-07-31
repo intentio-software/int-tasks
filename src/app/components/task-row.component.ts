@@ -41,6 +41,16 @@ import { Task, TodayReason } from "../models/task.models";
 
       <button
         type="button"
+        class="star"
+        [class.on]="task.today"
+        [title]="task.today ? 'Remove from Today' : 'Pull onto Today'"
+        (click)="starToggled.emit()"
+      >
+        <i class="pi" [ngClass]="task.today ? 'pi-star-fill' : 'pi-star'"></i>
+      </button>
+
+      <button
+        type="button"
         class="play"
         [class.active]="running"
         [title]="running ? 'Stop the timer' : 'Start a focus session on this task'"
@@ -148,6 +158,25 @@ import { Task, TodayReason } from "../models/task.models";
         border-radius: 999px;
       }
 
+      .star {
+        flex: none;
+        border: none;
+        background: transparent;
+        color: var(--ink-faint);
+        font-size: 0.9rem;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.12s ease, color 0.12s ease;
+      }
+      .row:hover .star,
+      .star.on {
+        opacity: 1;
+      }
+      .star.on,
+      .star:hover {
+        color: var(--accent);
+      }
+
       .play {
         flex: none;
         border: none;
@@ -179,6 +208,7 @@ export class TaskRowComponent {
   @Output() readonly toggled = new EventEmitter<boolean>();
   @Output() readonly opened = new EventEmitter<void>();
   @Output() readonly timerToggled = new EventEmitter<void>();
+  @Output() readonly starToggled = new EventEmitter<void>();
 
   get reasonLabel(): string {
     switch (this.reason) {

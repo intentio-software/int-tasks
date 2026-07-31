@@ -43,10 +43,15 @@ export interface Board {
   lists: List[];
 }
 
+export interface Settings {
+  dailyFocusGoal: number;
+}
+
 export interface Data {
   boards: Board[];
   tasks: Task[];
   revision: number;
+  settings: Settings;
 }
 
 export type Quadrant = "quick-win" | "big-bet" | "fill-in" | "thankless";

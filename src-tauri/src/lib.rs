@@ -55,10 +55,6 @@ fn utc_offset_seconds() -> i32 {
     chrono::Local::now().offset().local_minus_utc()
 }
 
-/// Focus sessions aimed for per day. Fixed for now; a setting once there is
-/// somewhere sensible to put one.
-const DAILY_GOAL: u32 = 4;
-
 fn today_date() -> String {
     chrono::Local::now().format("%Y-%m-%d").to_string()
 }
@@ -76,7 +72,7 @@ fn snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
         today: query::today(&data, &date),
         summary: query::time_summary(&data, &sessions, None, None),
         matrix: matrix::plot(&data, &date),
-        stats: stats::stats(&data, &sessions, &date, utc_offset_seconds(), DAILY_GOAL),
+        stats: stats::stats(&data, &sessions, &date, utc_offset_seconds(), data.settings.daily_focus_goal),
         timer: state.timer.snapshot(),
         data,
         date,
@@ -191,6 +187,12 @@ fn score_task(
 fn suggest_task(state: State<'_, AppState>, low_energy: bool) -> Result<Option<Plotted>, String> {
     let data = state.store.read().map_err(fail)?;
     Ok(matrix::suggest(&data, &today_date(), low_energy))
+}
+
+/// Change how many focus sessions a day aims for.
+#[tauri::command]
+fn set_daily_goal(state: State<'_, AppState>, sessions: u32) -> Result<int_tasks_core::Settings, String> {
+    state.store.set_daily_goal(sessions).map_err(fail)
 }
 
 #[tauri::command]
@@ -424,6 +426,7 @@ pub fn run() {
             update_task,
             score_task,
             suggest_task,
+            set_daily_goal,
             add_board,
             add_list,
             find_tasks,

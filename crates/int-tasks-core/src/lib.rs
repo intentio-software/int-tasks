@@ -35,4 +35,4 @@ pub use model::{Board, List, Session, SessionKind, Status, Task, new_id, now_mil
 pub use matrix::{Plotted, Quadrant};
 pub use stats::Stats;
 pub use query::{Filter, TaskTime, TimeSummary, TodayEntry, TodayReason};
-pub use store::{Data, Store};
+pub use store::{Data, Settings, Store};

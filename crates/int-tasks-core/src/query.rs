@@ -210,7 +210,7 @@ mod tests {
 
     fn data_with(tasks: Vec<Task>) -> Data {
         let board = Board::with_default_lists("Tasks", 0);
-        Data { boards: vec![board], tasks, revision: 1 }
+        Data { boards: vec![board], tasks, revision: 1, settings: Default::default() }
     }
 
     fn task(title: &str, due: Option<&str>, flagged: bool, status: Status) -> Task {

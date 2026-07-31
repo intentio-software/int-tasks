@@ -142,7 +142,7 @@ mod tests {
     }
 
     fn data_with(tasks: Vec<Task>) -> Data {
-        Data { boards: vec![Board::with_default_lists("Tasks", 0)], tasks, revision: 1 }
+        Data { boards: vec![Board::with_default_lists("Tasks", 0)], tasks, revision: 1, settings: Default::default() }
     }
 
     fn done(title: &str, impact: Option<u8>, completed_on: &str) -> Task {

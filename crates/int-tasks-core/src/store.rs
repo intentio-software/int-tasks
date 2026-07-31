@@ -23,6 +23,22 @@ use crate::model::{Board, List, Session, Status, Task, new_id, now_millis};
 pub const TASKS_FILE: &str = "tasks.json";
 pub const SESSIONS_FILE: &str = "sessions.jsonl";
 
+/// User preferences, kept alongside the data so there is one file to move.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Settings {
+    /// Focus sessions aimed for each day.
+    pub daily_focus_goal: u32,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        // Four twenty-five minute sessions is a realistic day of deep work, not
+        // an aspirational one — a goal that is never met stops meaning anything.
+        Settings { daily_focus_goal: 4 }
+    }
+}
+
 /// Everything in `tasks.json`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Data {
@@ -33,6 +49,9 @@ pub struct Data {
     /// Bumped on every write, so a reader can tell whether it has stale data.
     #[serde(default)]
     pub revision: u64,
+    /// Defaulted so a store written before settings existed still loads.
+    #[serde(default)]
+    pub settings: Settings,
 }
 
 impl Data {
@@ -41,7 +60,12 @@ impl Data {
     /// Seeded rather than empty because an empty board asks the user to make a
     /// decision before they can write anything down.
     pub fn seeded() -> Self {
-        Data { boards: vec![Board::with_default_lists("Tasks", 0)], tasks: Vec::new(), revision: 1 }
+        Data {
+            boards: vec![Board::with_default_lists("Tasks", 0)],
+            tasks: Vec::new(),
+            revision: 1,
+            settings: Settings::default(),
+        }
     }
 
     pub fn board(&self, id: &str) -> Option<&Board> {
@@ -331,6 +355,15 @@ impl Store {
         })
     }
 
+    /// Change the daily focus goal. Zero would make the goal meaningless, so
+    /// it is clamped to something achievable.
+    pub fn set_daily_goal(&self, sessions: u32) -> Result<Settings> {
+        self.update(|data| {
+            data.settings.daily_focus_goal = sessions.clamp(1, 16);
+            Ok(data.settings.clone())
+        })
+    }
+
     // -----------------------------------------------------------------------
     // sessions
     // -----------------------------------------------------------------------
@@ -542,6 +575,23 @@ mod tests {
             .filter(|name| name.ends_with(".tmp"))
             .collect();
         assert!(strays.is_empty(), "temp files left behind: {strays:?}");
+    }
+
+    #[test]
+    fn the_daily_goal_can_be_changed_and_is_kept_sane() {
+        let store = temp_store("goal");
+        assert_eq!(store.read().unwrap().settings.daily_focus_goal, 4);
+        assert_eq!(store.set_daily_goal(6).unwrap().daily_focus_goal, 6);
+        assert_eq!(store.read().unwrap().settings.daily_focus_goal, 6);
+        // A goal of zero could never be met or missed.
+        assert_eq!(store.set_daily_goal(0).unwrap().daily_focus_goal, 1);
+    }
+
+    #[test]
+    fn a_store_written_before_settings_existed_still_loads() {
+        let store = temp_store("legacy");
+        fs::write(store.tasks_path(), r#"{"boards":[],"tasks":[],"revision":3}"#).unwrap();
+        assert_eq!(store.read().unwrap().settings.daily_focus_goal, 4);
     }
 
     #[test]

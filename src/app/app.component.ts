@@ -56,6 +56,18 @@ export class AppComponent implements OnInit, OnDestroy {
   readonly editing = signal<Task | null>(null);
   /** The last suggestion, so it can be shown and acted on. */
   readonly suggestion = signal<Plotted | null>(null);
+  /** Empty means every project. */
+  readonly projectFilter = signal("");
+
+  /** Goal options that stay achievable; a target never met means nothing. */
+  readonly goalOptions = [2, 3, 4, 5, 6, 8, 10];
+
+  /** The matrix, narrowed to the chosen project. */
+  readonly visibleMatrix = computed(() => {
+    const project = this.projectFilter();
+    const plotted = this.tasks.matrix();
+    return project ? plotted.filter((entry) => entry.project === project) : plotted;
+  });
 
   private menuUnlisten: UnlistenFn | null = null;
   private finishedUnlisten: UnlistenFn | null = null;
@@ -269,6 +281,27 @@ export class AppComponent implements OnInit, OnDestroy {
     await this.tasks.moveTask(task.id, listId, event.currentIndex);
   }
 
+  selectBoard(boardId: string): void {
+    const board = this.tasks.boards().find((candidate) => candidate.id === boardId);
+    if (board) {
+      this.tasks.activeBoard.set(board);
+    }
+  }
+
+  /**
+   * Create a board and switch to it.
+   *
+   * Making one and leaving the user on the old board was the bug here: boards
+   * existed but were unreachable.
+   */
+  async newBoard(): Promise<void> {
+    const created = await this.tasks.addBoard(`Board ${this.tasks.boards().length + 1}`);
+    if (created) {
+      this.selectBoard(created.id);
+      this.view.set("board");
+    }
+  }
+
   async addList(): Promise<void> {
     const board = this.tasks.activeBoard();
     if (!board) {
@@ -301,7 +334,7 @@ export class AppComponent implements OnInit, OnDestroy {
         this.focusCapture();
         break;
       case "new-board":
-        await this.tasks.addBoard(`Board ${this.tasks.boards().length + 1}`);
+        await this.newBoard();
         break;
       case "view-today":
         this.view.set("today");

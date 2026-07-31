@@ -508,3 +508,51 @@ button.ghost:hover {
 .suggestion button:hover {
   background: var(--accent-strong);
 }
+
+/* ------------------------------------------------- switchers and filters */
+
+/* Native selects, styled down to match the chrome. A board switcher and a
+   project filter both need to be obvious rather than pretty. */
+.board-switch,
+.project-filter,
+.goal-select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-strong);
+  font: inherit;
+  padding: 0.2rem 0.4rem;
+  cursor: pointer;
+}
+
+.board-switch {
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-color: transparent;
+  background: transparent;
+}
+
+.board-switch:hover {
+  border-color: var(--border);
+}
+
+.project-filter {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--ink-muted);
+}
+
+/* Sits inline inside the goal chip, so 2/4 stays readable as one thing. */
+.goal-select {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 0.75rem;
+  padding: 0 0.1rem;
+  appearance: none;
+  cursor: pointer;
+}
+
+.goal-select:hover {
+  color: var(--accent);
+}

@@ -34,9 +34,18 @@
         <span class="streak" *ngIf="stats.streakDays > 0" [title]="stats.streakDays + ' day streak'">
           <i class="pi pi-bolt"></i> {{ stats.streakDays }}
         </span>
-        <span class="goal" [class.met]="stats.goalMet" [title]="'Focus sessions today, goal ' + stats.dailyGoal">
+        <span class="goal" [class.met]="stats.goalMet" title="Focus sessions today. Change the target here.">
           <i class="pi" [ngClass]="stats.goalMet ? 'pi-check-circle' : 'pi-circle'"></i>
-          {{ stats.sessionsToday }}/{{ stats.dailyGoal }}
+          {{ stats.sessionsToday }}/<select
+            class="goal-select"
+            [ngModel]="stats.dailyGoal"
+            (ngModelChange)="tasks.setDailyGoal($event)"
+            aria-label="Daily focus goal"
+          >
+            @for (option of goalOptions; track option) {
+              <option [value]="option">{{ option }}</option>
+            }
+          </select>
         </span>
         <span class="points" *ngIf="stats.pointsToday > 0" title="Impact finished today">
           +{{ stats.pointsToday }}
@@ -100,6 +109,7 @@
             (toggled)="toggleDone(entry, $event)"
             (timerToggled)="toggleTimerFor(entry)"
             (opened)="open(entry)"
+            (starToggled)="toggleToday(entry)"
           ></app-task-row>
         } @else {
           <div class="empty">
@@ -113,7 +123,20 @@
       <section class="matrix">
         <div class="section-head">
           <h2>Impact vs effort</h2>
-          <span class="count">{{ tasks.matrix().length }}</span>
+          <span class="count">{{ visibleMatrix().length }}</span>
+          @if (tasks.projects().length) {
+            <select
+              class="project-filter"
+              [ngModel]="projectFilter()"
+              (ngModelChange)="projectFilter.set($event)"
+              aria-label="Filter by project"
+            >
+              <option value="">All projects</option>
+              @for (project of tasks.projects(); track project) {
+                <option [value]="project">{{ project }}</option>
+              }
+            </select>
+          }
           <button type="button" class="ghost small" (click)="suggest(false)">Best next</button>
           <button type="button" class="ghost small" (click)="suggest(true)">I'm sluggish</button>
         </div>
@@ -132,7 +155,7 @@
         }
 
         <app-matrix-view
-          [tasks]="tasks.matrix()"
+          [tasks]="visibleMatrix()"
           [selectedId]="suggestion()?.id ?? null"
           (picked)="open($event)"
         ></app-matrix-view>
@@ -140,8 +163,18 @@
     } @else {
       <section class="board">
         <div class="section-head">
-          <h2>{{ tasks.activeBoard()?.name }}</h2>
+          <select
+            class="board-switch"
+            [ngModel]="tasks.activeBoard()?.id"
+            (ngModelChange)="selectBoard($event)"
+            aria-label="Board"
+          >
+            @for (board of tasks.boards(); track board.id) {
+              <option [value]="board.id">{{ board.name }}</option>
+            }
+          </select>
           <span class="count">{{ tasks.openCount() }} open</span>
+          <button type="button" class="ghost small" (click)="newBoard()">New board</button>
           <button type="button" class="ghost small" (click)="addList()">Add list</button>
         </div>
 
@@ -168,6 +201,7 @@
                       (toggled)="toggleDone(task, $event)"
                       (timerToggled)="toggleTimerFor(task)"
                       (opened)="open(task)"
+                      (starToggled)="toggleToday(task)"
                     ></app-task-row>
                   </div>
                 }

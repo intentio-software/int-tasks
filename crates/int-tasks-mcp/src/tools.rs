@@ -532,7 +532,7 @@ impl ToolProvider for TaskTools {
                 let data = store.read().map_err(err)?;
                 let sessions = store.sessions().map_err(err)?;
                 let offset = chrono::Local::now().offset().local_minus_utc();
-                let stats = stats::stats(&data, &sessions, &self.today(), offset, 4);
+                let stats = stats::stats(&data, &sessions, &self.today(), offset, data.settings.daily_focus_goal);
                 let value = serde_json::to_value(&stats).map_err(|err| err.to_string())?;
                 Ok(ToolOutput::json(&value))
             }

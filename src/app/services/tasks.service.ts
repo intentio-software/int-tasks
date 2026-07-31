@@ -134,6 +134,21 @@ export class TasksService {
     }
   }
 
+  async setDailyGoal(sessions: number): Promise<void> {
+    await this.guard(() => invoke("set_daily_goal", { sessions }));
+  }
+
+  /** Distinct project names across open tasks, for the filter control. */
+  readonly projects = computed<string[]>(() => {
+    const names = new Set<string>();
+    for (const task of this.tasks()) {
+      if (task.project) {
+        names.add(task.project);
+      }
+    }
+    return [...names].sort((a, b) => a.localeCompare(b));
+  });
+
   async addBoard(name: string): Promise<Board | null> {
     return this.guard(() => invoke<Board>("add_board", { name }));
   }
