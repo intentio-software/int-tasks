@@ -16,7 +16,13 @@ import { Task, TodayReason } from "../models/task.models";
   imports: [CommonModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="row" [class.done]="task.status === 'done'" [class.running]="running">
+    <div
+      class="row"
+      [class.done]="task.status === 'done'"
+      [class.running]="running"
+      [class.menued]="menuOpen"
+      (contextmenu)="onContextMenu($event)"
+    >
       <button
         type="button"
         class="check"
@@ -70,7 +76,8 @@ import { Task, TodayReason } from "../models/task.models";
         border-radius: 10px;
         transition: background 0.12s ease;
       }
-      .row:hover {
+      .row:hover,
+      .row.menued {
         background: var(--hover);
       }
       .row.running {
@@ -169,6 +176,7 @@ import { Task, TodayReason } from "../models/task.models";
         transition: opacity 0.12s ease, color 0.12s ease;
       }
       .row:hover .star,
+      .row.menued .star,
       .star.on {
         opacity: 1;
       }
@@ -188,6 +196,7 @@ import { Task, TodayReason } from "../models/task.models";
         transition: opacity 0.12s ease, color 0.12s ease;
       }
       .row:hover .play,
+      .row.menued .play,
       .play.active {
         opacity: 1;
       }
@@ -209,6 +218,15 @@ export class TaskRowComponent {
   @Output() readonly opened = new EventEmitter<void>();
   @Output() readonly timerToggled = new EventEmitter<void>();
   @Output() readonly starToggled = new EventEmitter<void>();
+  @Output() readonly menuRequested = new EventEmitter<MouseEvent>();
+
+  /** True while this row's context menu is showing, so it stays highlighted. */
+  @Input() menuOpen = false;
+
+  onContextMenu(event: MouseEvent): void {
+    event.preventDefault();
+    this.menuRequested.emit(event);
+  }
 
   get reasonLabel(): string {
     switch (this.reason) {

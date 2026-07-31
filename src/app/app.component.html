@@ -119,6 +119,8 @@
             (timerToggled)="toggleTimerFor(entry)"
             (opened)="open(entry)"
             (starToggled)="toggleToday(entry)"
+            (menuRequested)="openTaskMenu(entry, $event)"
+            [menuOpen]="taskMenu()?.task?.id === entry.id"
           ></app-task-row>
         } @else {
           <div class="empty">
@@ -167,6 +169,7 @@
           [tasks]="visibleMatrix()"
           [selectedId]="suggestion()?.id ?? null"
           (picked)="open($event)"
+          (menuRequested)="openTaskMenu($event.task, $event.event)"
         ></app-matrix-view>
       </section>
     } @else {
@@ -211,6 +214,8 @@
                       (timerToggled)="toggleTimerFor(task)"
                       (opened)="open(task)"
                       (starToggled)="toggleToday(task)"
+                      (menuRequested)="openTaskMenu(task, $event)"
+                      [menuOpen]="taskMenu()?.task?.id === task.id"
                     ></app-task-row>
                   </div>
                 }
@@ -240,6 +245,17 @@
     (deleted)="deleteEditing()"
     (closed)="editing.set(null)"
   ></app-task-detail>
+}
+
+@if (taskMenu(); as menu) {
+  <app-task-menu
+    [task]="menu.task"
+    [running]="isRunningFor(menu.task)"
+    [x]="menu.x"
+    [y]="menu.y"
+    (chosen)="runTaskAction($event)"
+    (closed)="taskMenu.set(null)"
+  ></app-task-menu>
 }
 
 @if (labelsOpen()) {

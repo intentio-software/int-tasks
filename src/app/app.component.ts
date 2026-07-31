@@ -19,6 +19,7 @@ import { AboutDialogComponent } from "./components/about-dialog.component";
 import { LabelEdit, LabelKind, LabelsDialogComponent } from "./components/labels-dialog.component";
 import { MatrixViewComponent } from "./components/matrix-view.component";
 import { TaskDetailComponent } from "./components/task-detail.component";
+import { TaskAction, TaskMenuComponent } from "./components/task-menu.component";
 import { TaskRowComponent } from "./components/task-row.component";
 import { List, Plotted, Task } from "./models/task.models";
 import { TasksService } from "./services/tasks.service";
@@ -40,6 +41,7 @@ type View = "today" | "board" | "matrix";
     LabelsDialogComponent,
     MatrixViewComponent,
     TaskDetailComponent,
+    TaskMenuComponent,
     TaskRowComponent
   ],
   templateUrl: "./app.component.html",
@@ -53,6 +55,8 @@ export class AppComponent implements OnInit, OnDestroy {
   readonly view = signal<View>("today");
   readonly aboutOpen = signal(false);
   readonly labelsOpen = signal(false);
+  /** The task the context menu is open on, and where it was opened. */
+  readonly taskMenu = signal<{ task: Task; x: number; y: number } | null>(null);
   readonly appVersion = signal("0.1.0");
   readonly draft = signal("");
   /** Task shown in the detail panel, if any. */
@@ -388,6 +392,11 @@ export class AppComponent implements OnInit, OnDestroy {
 
   @HostListener("window:keydown", ["$event"])
   onKey(event: KeyboardEvent): void {
+    if (event.key === "Escape" && this.taskMenu()) {
+      event.preventDefault();
+      this.taskMenu.set(null);
+      return;
+    }
     if (event.key === "Escape" && this.labelsOpen()) {
       event.preventDefault();
       this.labelsOpen.set(false);
@@ -428,6 +437,48 @@ export class AppComponent implements OnInit, OnDestroy {
       }
     } else {
       await this.tasks.deleteTag(target.name);
+    }
+  }
+
+  /** Open the context menu against a task, at the cursor. */
+  openTaskMenu(task: Task, event: MouseEvent): void {
+    this.taskMenu.set({ task, x: event.clientX, y: event.clientY });
+  }
+
+  async runTaskAction(action: TaskAction): Promise<void> {
+    const open = this.taskMenu();
+    if (!open) {
+      return;
+    }
+    // Close first: every branch below is either instant or awaits the store,
+    // and a menu left hanging over a task that has just been deleted is worse
+    // than one that closes a fraction early.
+    this.taskMenu.set(null);
+    const task = open.task;
+
+    switch (action) {
+      case "open":
+        this.open(task);
+        break;
+      case "done":
+        await this.toggleDone(task, true);
+        break;
+      case "reopen":
+        await this.toggleDone(task, false);
+        break;
+      case "today":
+        await this.toggleToday(task);
+        break;
+      case "timer":
+        await this.toggleTimerFor(task);
+        break;
+      case "delete":
+        // The detail panel may be showing the task that is about to go.
+        if (this.editing()?.id === task.id) {
+          this.editing.set(null);
+        }
+        await this.remove(task);
+        break;
     }
   }
 

@@ -40,6 +40,7 @@ import { Plotted } from "../models/task.models";
             [class.selected]="entry.id === selectedId"
             [attr.transform]="'translate(' + x(entry.effort) + ',' + y(entry.impact) + ')'"
             (click)="picked.emit(entry)"
+            (contextmenu)="onContextMenu(entry, $event)"
           >
             <!-- Urgency as a halo: the more pressing, the wider the ring. -->
             @if (entry.urgency > 0) {
@@ -171,6 +172,12 @@ export class MatrixViewComponent {
   @Input() selectedId: string | null = null;
 
   @Output() readonly picked = new EventEmitter<Plotted>();
+  @Output() readonly menuRequested = new EventEmitter<{ task: Plotted; event: MouseEvent }>();
+
+  onContextMenu(task: Plotted, event: MouseEvent): void {
+    event.preventDefault();
+    this.menuRequested.emit({ task, event });
+  }
 
   /** Effort 1–10 across the width, inset so edge dots are not clipped. */
   x(effort: number): number {
