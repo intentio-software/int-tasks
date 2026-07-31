@@ -106,6 +106,13 @@ export class AppComponent implements OnInit, OnDestroy {
     return { title: rest, project, tags };
   });
 
+  /** Today, narrowed to the chosen project. */
+  readonly visibleToday = computed(() => {
+    const project = this.projectFilter();
+    const entries = this.tasks.today();
+    return project ? entries.filter((entry) => entry.project === project) : entries;
+  });
+
   /** The matrix, narrowed to the chosen project. */
   readonly visibleMatrix = computed(() => {
     const project = this.projectFilter();
@@ -303,6 +310,20 @@ export class AppComponent implements OnInit, OnDestroy {
     return this.tasks.byList()[listId] ?? [];
   }
 
+  /**
+   * The cards actually drawn in a column.
+   *
+   * With no filter this hands back the stored array itself, which is what lets
+   * a dragged card settle in place instead of snapping back while the write
+   * happens. Filtering necessarily produces a new array, so that trick is lost
+   * — see `storedIndex` for how the drop position survives it.
+   */
+  visibleTasksIn(listId: string): Task[] {
+    const project = this.projectFilter();
+    const tasks = this.tasksIn(listId);
+    return project ? tasks.filter((task) => task.project === project) : tasks;
+  }
+
   /** Ids of every list, so cdkDropList knows what it can exchange with. */
   listIds(): string[] {
     return this.sortedLists().map((list) => list.id);
@@ -322,7 +343,27 @@ export class AppComponent implements OnInit, OnDestroy {
     }
     // The local arrays are moved first so the card does not visibly snap back
     // while the write happens; the reload afterwards is the authority.
-    await this.tasks.moveTask(task.id, listId, event.currentIndex);
+    await this.tasks.moveTask(task.id, listId, this.storedIndex(listId, event.currentIndex, task.id));
+  }
+
+  /**
+   * Translate a drop position in a filtered column to a position in the column.
+   *
+   * Dropping between two cards of one project must not send the task to that
+   * index of the whole list — with a filter on, the third visible card can be
+   * the twentieth stored one. The task lands immediately before whichever card
+   * it was dropped above, or at the end if it was dropped past the last.
+   */
+  private storedIndex(listId: string, droppedAt: number, movingId: string): number {
+    const project = this.projectFilter();
+    if (!project) {
+      return droppedAt;
+    }
+    // Untouched by the drag: filtering hands cdkDropList a throwaway array, so
+    // the stored order is still exactly as it was before the drop.
+    const others = this.tasksIn(listId).filter((task) => task.id !== movingId);
+    const neighbour = others.filter((task) => task.project === project)[droppedAt];
+    return neighbour ? others.indexOf(neighbour) : others.length;
   }
 
   selectBoard(boardId: string): void {

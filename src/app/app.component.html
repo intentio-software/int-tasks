@@ -1,3 +1,19 @@
+<ng-template #projectFilterControl>
+  @if (tasks.projects().length) {
+    <select
+      class="project-filter"
+      [ngModel]="projectFilter()"
+      (ngModelChange)="projectFilter.set($event)"
+      aria-label="Filter by project"
+    >
+      <option value="">All projects</option>
+      @for (project of tasks.projects(); track project) {
+        <option [value]="project">{{ project }}</option>
+      }
+    </select>
+  }
+</ng-template>
+
 <!-- The About backdrop sits at z-index 3000; the toast must clear it. -->
 <p-toast position="bottom-right" [baseZIndex]="4000">
   <ng-template #message let-message>
@@ -114,14 +130,15 @@
       <section class="today">
         <div class="section-head">
           <h2>Today</h2>
-          <span class="count">{{ tasks.today().length }}</span>
+          <span class="count">{{ visibleToday().length }}</span>
           <span class="date">{{ tasks.date() }}</span>
+          <ng-container *ngTemplateOutlet="projectFilterControl"></ng-container>
           <button type="button" class="ghost small" (click)="startBreak()">Take a break</button>
         </div>
 
-        @if (tasks.today().length) {
+        @if (visibleToday().length) {
           <app-task-row
-            *ngFor="let entry of tasks.today(); trackBy: trackTask"
+            *ngFor="let entry of visibleToday(); trackBy: trackTask"
             [task]="entry"
             [reason]="entry.reason"
             [running]="isRunningFor(entry)"
@@ -145,19 +162,7 @@
         <div class="section-head">
           <h2>Impact vs effort</h2>
           <span class="count">{{ visibleMatrix().length }}</span>
-          @if (tasks.projects().length) {
-            <select
-              class="project-filter"
-              [ngModel]="projectFilter()"
-              (ngModelChange)="projectFilter.set($event)"
-              aria-label="Filter by project"
-            >
-              <option value="">All projects</option>
-              @for (project of tasks.projects(); track project) {
-                <option [value]="project">{{ project }}</option>
-              }
-            </select>
-          }
+          <ng-container *ngTemplateOutlet="projectFilterControl"></ng-container>
           <button type="button" class="ghost small" (click)="suggest(false)">Best next</button>
           <button type="button" class="ghost small" (click)="suggest(true)">I'm sluggish</button>
         </div>
@@ -196,6 +201,7 @@
             }
           </select>
           <span class="count">{{ tasks.openCount() }} open</span>
+          <ng-container *ngTemplateOutlet="projectFilterControl"></ng-container>
           <button type="button" class="ghost small" (click)="newBoard()">New board</button>
           <button type="button" class="ghost small" (click)="addList()">Add list</button>
         </div>
@@ -205,17 +211,17 @@
             <div class="column">
               <div class="column-head">
                 <span class="column-name">{{ list.name }}</span>
-                <span class="column-count">{{ tasksIn(list.id).length }}</span>
+                <span class="column-count">{{ visibleTasksIn(list.id).length }}</span>
               </div>
               <div
                 class="cards"
                 cdkDropList
                 [id]="list.id"
-                [cdkDropListData]="tasksIn(list.id)"
+                [cdkDropListData]="visibleTasksIn(list.id)"
                 [cdkDropListConnectedTo]="listIds()"
                 (cdkDropListDropped)="onDrop($event, list.id)"
               >
-                @for (task of tasksIn(list.id); track task.id) {
+                @for (task of visibleTasksIn(list.id); track task.id) {
                   <div class="card" cdkDrag [cdkDragData]="task">
                     <app-task-row
                       [task]="task"
