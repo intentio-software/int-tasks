@@ -1,7 +1,7 @@
 {
   "name": "int-tasks",
   "version": "0.1.0",
-  "description": "Intentio Tasks — frictionless tasks with a pomodoro timer.",
+  "description": "Intentio Tasks \u2014 frictionless tasks with a pomodoro timer.",
   "scripts": {
     "ng": "ng",
     "start": "ng serve",

@@ -1,0 +1,217 @@
+name: Build
+
+on:
+  repository_dispatch:
+    types: [tauri-build]
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            args: --bundles deb,appimage
+            rust-targets: ''
+          - os: macos-latest
+            args: --target universal-apple-darwin
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+          - os: windows-latest
+            args: --bundles nsis
+            rust-targets: ''
+
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.client_payload.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      # The Rust side is a cargo workspace rooted at the repo, not at src-tauri.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+
+      - name: Install Linux system dependencies
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - run: npm ci
+
+      # Both secrets are validated before anything is compiled. A malformed one
+      # otherwise surfaces only at the signing step, after a multi-minute build.
+      - name: Verify signing key is usable
+        shell: bash
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::TAURI_SIGNING_PRIVATE_KEY is not set. It must be the raw contents of your .tauri/*.key file."
+            exit 1
+          fi
+          # The .key file is already base64; decoding it once must yield the
+          # two-line signing key. Double-encoding it is the easy mistake, and it
+          # decodes to a single line of base64 instead.
+          decoded=$(printf '%s' "$TAURI_SIGNING_PRIVATE_KEY" | base64 -d 2>/dev/null | head -1)
+          case "$decoded" in
+            *"secret key"*)
+              echo "Signing key decodes correctly." ;;
+            *)
+              echo "::error::TAURI_SIGNING_PRIVATE_KEY does not decode to a signing key. Use the raw contents of the .key file (already base64) — not 'base64' of that file, and with no trailing newline."
+              exit 1 ;;
+          esac
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+
+      - name: Verify Apple certificate password
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ]; then
+            echo "No Apple certificate configured — the macOS build will be unsigned."
+            exit 0
+          fi
+          printf '%s' "$APPLE_CERTIFICATE" | base64 -d > /tmp/cert.p12 2>/dev/null || {
+            echo "::error::APPLE_CERTIFICATE is not valid base64. Use: base64 -i cert.p12 | tr -d '\n'"
+            exit 1
+          }
+          if ! openssl pkcs12 -in /tmp/cert.p12 -nokeys -passin pass:"$APPLE_CERTIFICATE_PASSWORD" -legacy >/dev/null 2>&1; then
+            rm -f /tmp/cert.p12
+            echo "::error::APPLE_CERTIFICATE_PASSWORD does not open APPLE_CERTIFICATE. Re-export the .p12 with a password you record, and set both secrets together."
+            exit 1
+          fi
+          rm -f /tmp/cert.p12
+          echo "Apple certificate and password match."
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      - name: Get or create draft release
+        id: release
+        shell: bash
+        run: |
+          TAG=${{ github.event.client_payload.tag }}
+          RELEASE_ID=$(gh api repos/${{ github.repository }}/releases \
+            --jq ".[] | select(.tag_name==\"$TAG\") | .id" | head -1)
+          if [ -z "$RELEASE_ID" ]; then
+            RELEASE_ID=$(gh release create $TAG \
+              --draft --title "$TAG" --generate-notes \
+              --json id --jq '.id')
+          fi
+          echo "id=$RELEASE_ID" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          # Apple code-signing + notarization (macOS only — ignored on other platforms)
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          releaseId: ${{ steps.release.outputs.id }}
+          args: ${{ matrix.args }}
+
+      # The MCP server ships as its own binary rather than inside the app bundle.
+      # It has to be on PATH to be registered with an agent, and burying it in
+      # Contents/Resources would not put it there. Built per platform so the
+      # universal macOS app does not hand Intel users an arm64-only binary.
+      - name: Build MCP server
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            cargo build --release -p int-tasks-mcp --target aarch64-apple-darwin
+            cargo build --release -p int-tasks-mcp --target x86_64-apple-darwin
+            lipo -create -output int-tasks-mcp \
+              target/aarch64-apple-darwin/release/int-tasks-mcp \
+              target/x86_64-apple-darwin/release/int-tasks-mcp
+            tar -czf int-tasks-mcp-macos-universal.tar.gz int-tasks-mcp
+          elif [ "${{ matrix.os }}" = "windows-latest" ]; then
+            cargo build --release -p int-tasks-mcp
+            7z a int-tasks-mcp-windows-x86_64.zip ./target/release/int-tasks-mcp.exe
+          else
+            cargo build --release -p int-tasks-mcp
+            tar -czf int-tasks-mcp-linux-x86_64.tar.gz -C target/release int-tasks-mcp
+          fi
+
+      - name: Attach MCP server to release
+        shell: bash
+        # Only one archive exists per platform. Globbing both patterns at once
+        # makes the unmatched one expand to a literal filename, which fails the
+        # whole upload — so collect with nullglob and upload what is actually there.
+        run: |
+          shopt -s nullglob
+          files=(int-tasks-mcp-*.tar.gz int-tasks-mcp-*.zip)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::warning::no MCP archive was produced on ${{ matrix.os }}"
+            exit 0
+          fi
+          gh release upload ${{ steps.release.outputs.tag }} "${files[@]}" --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish:
+    needs: build
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Publish release
+        shell: bash
+        run: gh release edit ${{ github.event.client_payload.tag }} --draft=false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List release assets
+        shell: bash
+        run: |
+          echo "Assets in release ${{ github.event.client_payload.tag }}:"
+          gh release view ${{ github.event.client_payload.tag }} --json assets \
+            --jq '.assets[].name'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate latest.json from release .sig files
+        id: gen_json
+        continue-on-error: true
+        run: node scripts/generate-update-json.js ${{ github.event.client_payload.tag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+
+      - name: Upload latest.json
+        if: steps.gen_json.outcome == 'success'
+        shell: bash
+        run: gh release upload ${{ github.event.client_payload.tag }} latest.json --clobber
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
