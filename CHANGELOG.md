@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/intentio-software/int-tasks/compare/v1.3.0...v1.4.0) (2026-07-31)
+
+
+### Features
+
+* filter every view by project, and never publish a partial release ([4ce95ae](https://github.com/intentio-software/int-tasks/commit/4ce95ae42615d6697a82716768678e81266a8980))
+
 # [1.3.0](https://github.com/intentio-software/int-tasks/compare/v1.2.0...v1.3.0) (2026-07-31)
 
 
