@@ -69,12 +69,21 @@ import { Task } from "../models/task.models";
         <div class="row">
           <label class="field">
             <span>Project</span>
+            <!-- A datalist rather than a select: typing a new project must stay
+                 as quick as picking an existing one, but offering what already
+                 exists is what stops Intentio and intentio both appearing. -->
             <input
               type="text"
+              list="known-projects"
               placeholder="e.g. Intentio Tasks"
               [(ngModel)]="draftProject"
               (blur)="patch({ project: draftProject.trim() || null })"
             />
+            <datalist id="known-projects">
+              @for (name of knownProjects; track name) {
+                <option [value]="name"></option>
+              }
+            </datalist>
           </label>
           <label class="field">
             <span>Estimate (min)</span>
@@ -95,6 +104,15 @@ import { Task } from "../models/task.models";
             [(ngModel)]="draftTags"
             (blur)="commitTags()"
           />
+          @if (knownTags.length) {
+            <div class="suggested">
+              @for (name of knownTags; track name) {
+                <button type="button" (click)="addTag(name)" [disabled]="hasTag(name)">
+                  {{ name }}
+                </button>
+              }
+            </div>
+          }
         </label>
 
         <!-- Scoring is the part that puts a task on the matrix, so it gets the
@@ -277,6 +295,11 @@ import { Task } from "../models/task.models";
   ]
 })
 export class TaskDetailComponent {
+  /** Projects already in use, offered as autocomplete. */
+  @Input() knownProjects: string[] = [];
+  /** Tags already in use, offered as one-click chips. */
+  @Input() knownTags: string[] = [];
+
   @Input({ required: true }) set task(value: Task) {
     this.current = value;
     this.draftTitle = value.title;
@@ -370,4 +393,25 @@ export class TaskDetailComponent {
     const parsed = Number(value);
     return value === "" || Number.isNaN(parsed) ? null : parsed;
   }
+  /** Tags currently in the draft field, normalised for comparison. */
+  private currentTags(): string[] {
+    return this.draftTags
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+  }
+
+  hasTag(name: string): boolean {
+    return this.currentTags().some((tag) => tag.toLowerCase() === name.toLowerCase());
+  }
+
+  /** Append a known tag from the chip row. */
+  addTag(name: string): void {
+    if (this.hasTag(name)) {
+      return;
+    }
+    this.draftTags = [...this.currentTags(), name].join(", ");
+    this.commitTags();
+  }
+
 }

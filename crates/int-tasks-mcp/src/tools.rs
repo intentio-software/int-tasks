@@ -239,6 +239,34 @@ impl ToolProvider for TaskTools {
                 Self::object(json!({}), &[]),
             ),
             Tool::new(
+                "labels",
+                "Projects and type tags in use, with how many open and completed tasks carry each. Read this before setting a project or tag so an existing one is reused rather than a near-duplicate created.",
+                Self::object(json!({}), &[]),
+            ),
+            Tool::new(
+                "rename_label",
+                "Rename a project or tag on every task that carries it. Renaming onto a name already in use merges the two, which is how near-duplicates get tidied up.",
+                Self::object(
+                    json!({
+                        "kind": {"type": "string", "description": "project or tag."},
+                        "from": {"type": "string"},
+                        "to": {"type": "string"}
+                    }),
+                    &["kind", "from", "to"],
+                ),
+            ),
+            Tool::new(
+                "delete_label",
+                "Clear a project or tag from every task that carries it. The tasks themselves are untouched.",
+                Self::object(
+                    json!({
+                        "kind": {"type": "string", "description": "project or tag."},
+                        "name": {"type": "string"}
+                    }),
+                    &["kind", "name"],
+                ),
+            ),
+            Tool::new(
                 "store_info",
                 "Where the store lives and what is in it.",
                 Self::object(json!({}), &[]),
@@ -537,6 +565,41 @@ impl ToolProvider for TaskTools {
                 Ok(ToolOutput::json(&value))
             }
 
+            "labels" => {
+                let data = store.read().map_err(err)?;
+                Ok(ToolOutput::json(&json!({
+                    "projects": serde_json::to_value(query::projects(&data)).map_err(|e| e.to_string())?,
+                    "tags": serde_json::to_value(query::tags(&data)).map_err(|e| e.to_string())?,
+                })))
+            }
+
+            "rename_label" => {
+                let kind = require_str(args, "kind")?;
+                let from = require_str(args, "from")?;
+                let to = require_str(args, "to")?;
+                let touched = match label_kind(&kind)? {
+                    LabelKind::Project => store.rename_project(&from, &to).map_err(err)?,
+                    LabelKind::Tag => store.rename_tag(&from, &to).map_err(err)?,
+                };
+                Ok(ToolOutput::json(&json!({
+                    "renamed": to.trim(),
+                    "tasks_updated": touched,
+                })))
+            }
+
+            "delete_label" => {
+                let kind = require_str(args, "kind")?;
+                let name = require_str(args, "name")?;
+                let touched = match label_kind(&kind)? {
+                    LabelKind::Project => store.delete_project(&name).map_err(err)?,
+                    LabelKind::Tag => store.delete_tag(&name).map_err(err)?,
+                };
+                Ok(ToolOutput::json(&json!({
+                    "cleared": name.trim(),
+                    "tasks_updated": touched,
+                })))
+            }
+
             "store_info" => {
                 let data = store.read().map_err(err)?;
                 let sessions = store.sessions().map_err(err)?;
@@ -553,6 +616,21 @@ impl ToolProvider for TaskTools {
 
             other => Err(format!("unknown tool: {other}")),
         }
+    }
+}
+
+/// Which label an agent means. Spelled out rather than taken as a bare string
+/// so a typo fails loudly instead of silently doing nothing.
+enum LabelKind {
+    Project,
+    Tag,
+}
+
+fn label_kind(raw: &str) -> Result<LabelKind, String> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "project" | "projects" => Ok(LabelKind::Project),
+        "tag" | "tags" => Ok(LabelKind::Tag),
+        other => Err(format!("kind must be `project` or `tag`, got `{other}`")),
     }
 }
 
@@ -579,6 +657,47 @@ mod tests {
             assert!(!tool.description.is_empty(), "{} has no description", tool.name);
             assert_eq!(tool.input_schema["type"], "object", "{} is not an object schema", tool.name);
         }
+    }
+
+    #[test]
+    fn labels_report_what_is_actually_in_use() {
+        let mut t = tools("labels");
+        call(&mut t, "add_task", json!({"title": "A", "project": "Apollo", "tags": ["bug", "admin"]}));
+        call(&mut t, "add_task", json!({"title": "B", "project": "Apollo", "tags": ["bug"]}));
+        let labels = call(&mut t, "labels", json!({}));
+        assert_eq!(labels["projects"][0]["name"], "Apollo");
+        assert_eq!(labels["projects"][0]["open"], 2);
+        assert_eq!(labels["tags"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn renaming_a_label_onto_an_existing_one_merges_them() {
+        let mut t = tools("merge");
+        call(&mut t, "add_task", json!({"title": "A", "project": "apollo"}));
+        call(&mut t, "add_task", json!({"title": "B", "project": "Apollo"}));
+        let renamed = call(&mut t, "rename_label", json!({"kind": "project", "from": "apollo", "to": "Apollo"}));
+        assert_eq!(renamed["tasks_updated"], 1);
+        let labels = call(&mut t, "labels", json!({}));
+        assert_eq!(labels["projects"].as_array().unwrap().len(), 1, "the two should have merged");
+        assert_eq!(labels["projects"][0]["open"], 2);
+    }
+
+    #[test]
+    fn deleting_a_label_leaves_the_tasks_alone() {
+        let mut t = tools("dellabel");
+        call(&mut t, "add_task", json!({"title": "A", "tags": ["bug", "admin"]}));
+        let cleared = call(&mut t, "delete_label", json!({"kind": "tag", "name": "bug"}));
+        assert_eq!(cleared["tasks_updated"], 1);
+        let listed = call(&mut t, "list_tasks", json!({}));
+        assert_eq!(listed["tasks"].as_array().unwrap().len(), 1, "the task survives");
+        assert_eq!(listed["tasks"][0]["tags"], json!(["admin"]));
+    }
+
+    #[test]
+    fn a_misspelled_kind_is_rejected_rather_than_ignored() {
+        let mut t = tools("badkind");
+        let err = t.call("delete_label", &json!({"kind": "porject", "name": "x"})).unwrap_err();
+        assert!(err.contains("project"), "the error should say what was expected: {err}");
     }
 
     #[test]

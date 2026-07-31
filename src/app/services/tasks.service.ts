@@ -2,7 +2,7 @@ import { Injectable, computed, signal } from "@angular/core";
 import { invoke } from "@tauri-apps/api/core";
 import { UnlistenFn, listen } from "@tauri-apps/api/event";
 
-import { Board, List, Plotted, Snapshot, Stats, Task, TimerState, TodayEntry } from "../models/task.models";
+import { Board, LabelUse, List, Plotted, Settings, Snapshot, Stats, Task, TimerState, TodayEntry } from "../models/task.models";
 
 /**
  * The app's single source of truth.
@@ -20,6 +20,9 @@ export class TasksService {
   readonly timer = signal<TimerState | null>(null);
   readonly matrix = signal<Plotted[]>([]);
   readonly stats = signal<Stats | null>(null);
+  readonly projectLabels = signal<LabelUse[]>([]);
+  readonly tagLabels = signal<LabelUse[]>([]);
+  readonly settings = signal<Settings | null>(null);
   readonly date = signal<string>("");
   readonly error = signal<string | null>(null);
   readonly storePath = signal<string>("");
@@ -65,6 +68,9 @@ export class TasksService {
     this.timer.set(snapshot.timer);
     this.matrix.set(snapshot.matrix);
     this.stats.set(snapshot.stats);
+    this.projectLabels.set(snapshot.projects);
+    this.tagLabels.set(snapshot.tags);
+    this.settings.set(snapshot.settings);
     this.date.set(snapshot.date);
     this.focusSecondsToday.set(snapshot.summary.total_seconds);
 
@@ -138,16 +144,31 @@ export class TasksService {
     await this.guard(() => invoke("set_daily_goal", { sessions }));
   }
 
-  /** Distinct project names across open tasks, for the filter control. */
-  readonly projects = computed<string[]>(() => {
-    const names = new Set<string>();
-    for (const task of this.tasks()) {
-      if (task.project) {
-        names.add(task.project);
-      }
-    }
-    return [...names].sort((a, b) => a.localeCompare(b));
-  });
+  /** Project names in use, for filters and autocomplete. */
+  readonly projects = computed<string[]>(() => this.projectLabels().map((label) => label.name));
+
+  /** Tag names in use, for autocomplete. */
+  readonly tagNames = computed<string[]>(() => this.tagLabels().map((label) => label.name));
+
+  async renameProject(from: string, to: string): Promise<void> {
+    await this.guard(() => invoke<number>("rename_project", { from, to }));
+  }
+
+  async deleteProject(name: string): Promise<void> {
+    await this.guard(() => invoke<number>("delete_project", { name }));
+  }
+
+  async renameTag(from: string, to: string): Promise<void> {
+    await this.guard(() => invoke<number>("rename_tag", { from, to }));
+  }
+
+  async deleteTag(name: string): Promise<void> {
+    await this.guard(() => invoke<number>("delete_tag", { name }));
+  }
+
+  async setHideCompletedAfterDays(days: number): Promise<void> {
+    await this.guard(() => invoke("set_hide_completed_after_days", { days }));
+  }
 
   async addBoard(name: string): Promise<Board | null> {
     return this.guard(() => invoke<Board>("add_board", { name }));

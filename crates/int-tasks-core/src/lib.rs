@@ -34,5 +34,5 @@ pub use error::{Result, TaskError};
 pub use model::{Board, List, Session, SessionKind, Status, Task, new_id, now_millis};
 pub use matrix::{Plotted, Quadrant};
 pub use stats::Stats;
-pub use query::{Filter, TaskTime, TimeSummary, TodayEntry, TodayReason};
+pub use query::{Filter, LabelUse, TaskTime, TimeSummary, TodayEntry, TodayReason};
 pub use store::{Data, Settings, Store};

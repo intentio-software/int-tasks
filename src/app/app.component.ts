@@ -16,6 +16,7 @@ import { Button } from "primeng/button";
 import { Toast } from "primeng/toast";
 
 import { AboutDialogComponent } from "./components/about-dialog.component";
+import { LabelEdit, LabelKind, LabelsDialogComponent } from "./components/labels-dialog.component";
 import { MatrixViewComponent } from "./components/matrix-view.component";
 import { TaskDetailComponent } from "./components/task-detail.component";
 import { TaskRowComponent } from "./components/task-row.component";
@@ -36,6 +37,7 @@ type View = "today" | "board" | "matrix";
     Toast,
     Button,
     AboutDialogComponent,
+    LabelsDialogComponent,
     MatrixViewComponent,
     TaskDetailComponent,
     TaskRowComponent
@@ -50,6 +52,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   readonly view = signal<View>("today");
   readonly aboutOpen = signal(false);
+  readonly labelsOpen = signal(false);
   readonly appVersion = signal("0.1.0");
   readonly draft = signal("");
   /** Task shown in the detail panel, if any. */
@@ -385,6 +388,11 @@ export class AppComponent implements OnInit, OnDestroy {
 
   @HostListener("window:keydown", ["$event"])
   onKey(event: KeyboardEvent): void {
+    if (event.key === "Escape" && this.labelsOpen()) {
+      event.preventDefault();
+      this.labelsOpen.set(false);
+      return;
+    }
     if (event.key === "Escape" && this.aboutOpen()) {
       event.preventDefault();
       this.aboutOpen.set(false);
@@ -397,4 +405,30 @@ export class AppComponent implements OnInit, OnDestroy {
       this.focusCapture();
     }
   }
+
+  /** Rename a project or tag everywhere it is used, merging duplicates. */
+  async renameLabel(edit: LabelEdit): Promise<void> {
+    if (edit.kind === "projects") {
+      await this.tasks.renameProject(edit.from, edit.to);
+      // The filter holds a name, not an id, so it has to follow the rename.
+      if (this.projectFilter() === edit.from) {
+        this.projectFilter.set(edit.to);
+      }
+    } else {
+      await this.tasks.renameTag(edit.from, edit.to);
+    }
+  }
+
+  /** Clear a project or tag from every task that carries it. */
+  async removeLabel(target: { kind: LabelKind; name: string }): Promise<void> {
+    if (target.kind === "projects") {
+      await this.tasks.deleteProject(target.name);
+      if (this.projectFilter() === target.name) {
+        this.projectFilter.set("");
+      }
+    } else {
+      await this.tasks.deleteTag(target.name);
+    }
+  }
+
 }

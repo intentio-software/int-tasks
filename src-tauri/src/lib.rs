@@ -13,8 +13,8 @@ use tauri::tray::{TrayIcon, TrayIconBuilder};
 use tauri::{AppHandle, Manager, State};
 
 use int_tasks_core::{
-    Data, Filter, Plotted, Session, SessionKind, Stats, Store, Task, TimeSummary, TodayEntry, matrix,
-    query, stats,
+    Data, Filter, LabelUse, Plotted, Session, SessionKind, Stats, Store, Task, TimeSummary,
+    TodayEntry, matrix, model, query, stats,
 };
 use timer::{Timer, TimerState};
 
@@ -45,6 +45,9 @@ pub struct Snapshot {
     /// Open, scored tasks placed on the impact/effort matrix.
     pub matrix: Vec<Plotted>,
     pub stats: Stats,
+    pub projects: Vec<LabelUse>,
+    pub tags: Vec<LabelUse>,
+    pub settings: int_tasks_core::Settings,
     /// Local date the Today list was built for, so the UI can notice midnight.
     pub date: String,
 }
@@ -68,16 +71,69 @@ fn snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
     let data = state.store.read().map_err(fail)?;
     let sessions = state.store.sessions().map_err(fail)?;
     let date = today_date();
+    // Everything derived is computed from the full store, before completed work
+    // ages out of the view — otherwise hiding a task would quietly rewrite the
+    // statistics it contributed to.
+    let projects = query::projects(&data);
+    let tags = query::tags(&data);
+    let settings = data.settings.clone();
+    let now = model::now_millis();
+
+    let snapshot_today = query::today(&data, &date);
+    let snapshot_matrix = matrix::plot(&data, &date);
+    let snapshot_stats =
+        stats::stats(&data, &sessions, &date, utc_offset_seconds(), data.settings.daily_focus_goal);
+    let summary = query::time_summary(&data, &sessions, None, None);
+
+    let mut data = data;
+    data.tasks
+        .retain(|task| !query::is_stale_completion(task, now, settings.hide_completed_after_days));
+
     Ok(Snapshot {
-        today: query::today(&data, &date),
-        summary: query::time_summary(&data, &sessions, None, None),
-        matrix: matrix::plot(&data, &date),
-        stats: stats::stats(&data, &sessions, &date, utc_offset_seconds(), data.settings.daily_focus_goal),
+        today: snapshot_today,
+        matrix: snapshot_matrix,
+        stats: snapshot_stats,
+        summary,
+        projects,
+        tags,
+        settings,
         timer: state.timer.snapshot(),
         data,
         date,
     })
 }
+
+/// Rename a project across every task carrying it.
+#[tauri::command]
+fn rename_project(state: State<'_, AppState>, from: String, to: String) -> Result<usize, String> {
+    state.store.rename_project(&from, &to).map_err(fail)
+}
+
+/// Remove a project from its tasks. The tasks themselves stay.
+#[tauri::command]
+fn delete_project(state: State<'_, AppState>, name: String) -> Result<usize, String> {
+    state.store.delete_project(&name).map_err(fail)
+}
+
+#[tauri::command]
+fn rename_tag(state: State<'_, AppState>, from: String, to: String) -> Result<usize, String> {
+    state.store.rename_tag(&from, &to).map_err(fail)
+}
+
+#[tauri::command]
+fn delete_tag(state: State<'_, AppState>, name: String) -> Result<usize, String> {
+    state.store.delete_tag(&name).map_err(fail)
+}
+
+/// How long a completed task stays visible.
+#[tauri::command]
+fn set_hide_completed_after_days(
+    state: State<'_, AppState>,
+    days: u32,
+) -> Result<int_tasks_core::Settings, String> {
+    state.store.set_hide_completed_after_days(days).map_err(fail)
+}
+
 
 #[tauri::command]
 fn add_task(state: State<'_, AppState>, title: String, list_id: Option<String>) -> Result<Task, String> {
@@ -427,6 +483,11 @@ pub fn run() {
             score_task,
             suggest_task,
             set_daily_goal,
+            set_hide_completed_after_days,
+            rename_project,
+            delete_project,
+            rename_tag,
+            delete_tag,
             add_board,
             add_list,
             find_tasks,

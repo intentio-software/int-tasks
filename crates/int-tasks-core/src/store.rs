@@ -29,13 +29,24 @@ pub const SESSIONS_FILE: &str = "sessions.jsonl";
 pub struct Settings {
     /// Focus sessions aimed for each day.
     pub daily_focus_goal: u32,
+    /// Days a completed task stays visible before it drops out of the views.
+    ///
+    /// It is only hidden, never deleted: history and statistics still count it,
+    /// and a finished task you can no longer see is exactly what you want a
+    /// week later and exactly what you do not want an hour later.
+    #[serde(default = "default_hide_completed_after_days")]
+    pub hide_completed_after_days: u32,
+}
+
+fn default_hide_completed_after_days() -> u32 {
+    2
 }
 
 impl Default for Settings {
     fn default() -> Self {
         // Four twenty-five minute sessions is a realistic day of deep work, not
         // an aspirational one — a goal that is never met stops meaning anything.
-        Settings { daily_focus_goal: 4 }
+        Settings { daily_focus_goal: 4, hide_completed_after_days: default_hide_completed_after_days() }
     }
 }
 
@@ -355,6 +366,106 @@ impl Store {
         })
     }
 
+    /// Rename a project across every task carrying it.
+    ///
+    /// Returns how many tasks changed. Matching is case-insensitive so the
+    /// near-duplicates that free text inevitably produces can be merged by
+    /// renaming one onto the other.
+    pub fn rename_project(&self, from: &str, to: &str) -> Result<usize> {
+        let from = from.trim().to_string();
+        let to = to.trim().to_string();
+        if from.is_empty() || to.is_empty() {
+            return Err(TaskError::EmptyTitle);
+        }
+        self.update(|data| {
+            let mut changed = 0;
+            for task in &mut data.tasks {
+                let current = task.project.as_deref().unwrap_or("");
+                // The match is case-insensitive so `apollo` folds into `Apollo`,
+                // but a task already spelled exactly right is left alone —
+                // touching `updated_at` on an unchanged task would be a phantom
+                // edit for anything syncing on timestamps.
+                if current.trim().eq_ignore_ascii_case(&from) && current != to {
+                    task.project = Some(to.clone());
+                    task.updated_at = now_millis();
+                    changed += 1;
+                }
+            }
+            Ok(changed)
+        })
+    }
+
+    /// Remove a project from every task. The tasks themselves are untouched.
+    pub fn delete_project(&self, name: &str) -> Result<usize> {
+        let name = name.trim().to_string();
+        self.update(|data| {
+            let mut changed = 0;
+            for task in &mut data.tasks {
+                if task.project.as_deref().map(|p| p.trim().eq_ignore_ascii_case(&name)).unwrap_or(false) {
+                    task.project = None;
+                    task.updated_at = now_millis();
+                    changed += 1;
+                }
+            }
+            Ok(changed)
+        })
+    }
+
+    /// Rename a tag everywhere, merging into an existing one if it collides.
+    pub fn rename_tag(&self, from: &str, to: &str) -> Result<usize> {
+        let from = from.trim().to_string();
+        let to = to.trim().to_string();
+        if from.is_empty() || to.is_empty() {
+            return Err(TaskError::EmptyTitle);
+        }
+        self.update(|data| {
+            let mut changed = 0;
+            for task in &mut data.tasks {
+                if !task.tags.iter().any(|tag| tag.trim().eq_ignore_ascii_case(&from)) {
+                    continue;
+                }
+                // Already spelled exactly right, and nothing else to fold in.
+                if task.tags.iter().any(|tag| tag == &to) && from.eq_ignore_ascii_case(&to) {
+                    continue;
+                }
+                task.tags.retain(|tag| !tag.trim().eq_ignore_ascii_case(&from));
+                // Renaming onto a tag the task already has must not duplicate it.
+                if !task.tags.iter().any(|tag| tag.trim().eq_ignore_ascii_case(&to)) {
+                    task.tags.push(to.clone());
+                }
+                task.tags.sort();
+                task.updated_at = now_millis();
+                changed += 1;
+            }
+            Ok(changed)
+        })
+    }
+
+    /// Remove a tag from every task.
+    pub fn delete_tag(&self, name: &str) -> Result<usize> {
+        let name = name.trim().to_string();
+        self.update(|data| {
+            let mut changed = 0;
+            for task in &mut data.tasks {
+                let before = task.tags.len();
+                task.tags.retain(|tag| !tag.trim().eq_ignore_ascii_case(&name));
+                if task.tags.len() != before {
+                    task.updated_at = now_millis();
+                    changed += 1;
+                }
+            }
+            Ok(changed)
+        })
+    }
+
+    /// Change how long a completed task stays visible.
+    pub fn set_hide_completed_after_days(&self, days: u32) -> Result<Settings> {
+        self.update(|data| {
+            data.settings.hide_completed_after_days = days.min(365);
+            Ok(data.settings.clone())
+        })
+    }
+
     /// Change the daily focus goal. Zero would make the goal meaningless, so
     /// it is clamped to something achievable.
     pub fn set_daily_goal(&self, sessions: u32) -> Result<Settings> {
@@ -592,6 +703,72 @@ mod tests {
         let store = temp_store("legacy");
         fs::write(store.tasks_path(), r#"{"boards":[],"tasks":[],"revision":3}"#).unwrap();
         assert_eq!(store.read().unwrap().settings.daily_focus_goal, 4);
+    }
+
+    #[test]
+    fn renaming_a_project_merges_case_variants() {
+        let store = temp_store("rename-project");
+        let a = store.add_task("One", None).unwrap();
+        let b = store.add_task("Two", None).unwrap();
+        store.update(|data| {
+            data.task_mut(&a.id).unwrap().project = Some("Intentio".into());
+            // The near-duplicate free text inevitably produces.
+            data.task_mut(&b.id).unwrap().project = Some("intentio ".into());
+            Ok(())
+        }).unwrap();
+
+        assert_eq!(store.rename_project("Intentio", "Intentio Suite").unwrap(), 2);
+        let data = store.read().unwrap();
+        assert!(data.tasks.iter().all(|t| t.project.as_deref() == Some("Intentio Suite")));
+    }
+
+    #[test]
+    fn deleting_a_project_keeps_the_tasks() {
+        let store = temp_store("delete-project");
+        let task = store.add_task("Keep me", None).unwrap();
+        store.update(|data| {
+            data.task_mut(&task.id).unwrap().project = Some("Doomed".into());
+            Ok(())
+        }).unwrap();
+
+        assert_eq!(store.delete_project("doomed").unwrap(), 1);
+        let data = store.read().unwrap();
+        assert_eq!(data.tasks.len(), 1, "removing a project must not remove its work");
+        assert!(data.task(&task.id).unwrap().project.is_none());
+    }
+
+    #[test]
+    fn renaming_a_tag_onto_an_existing_one_does_not_duplicate_it() {
+        let store = temp_store("rename-tag");
+        let task = store.add_task("Tagged", None).unwrap();
+        store.update(|data| {
+            data.task_mut(&task.id).unwrap().tags = vec!["bug".into(), "defect".into()];
+            Ok(())
+        }).unwrap();
+
+        store.rename_tag("defect", "bug").unwrap();
+        let data = store.read().unwrap();
+        assert_eq!(data.task(&task.id).unwrap().tags, vec!["bug"]);
+    }
+
+    #[test]
+    fn deleting_a_tag_leaves_the_others() {
+        let store = temp_store("delete-tag");
+        let task = store.add_task("Tagged", None).unwrap();
+        store.update(|data| {
+            data.task_mut(&task.id).unwrap().tags = vec!["bug".into(), "admin".into()];
+            Ok(())
+        }).unwrap();
+
+        assert_eq!(store.delete_tag("BUG").unwrap(), 1);
+        assert_eq!(store.read().unwrap().task(&task.id).unwrap().tags, vec!["admin"]);
+    }
+
+    #[test]
+    fn the_completed_window_is_settable() {
+        let store = temp_store("window");
+        assert_eq!(store.read().unwrap().settings.hide_completed_after_days, 2);
+        assert_eq!(store.set_hide_completed_after_days(7).unwrap().hide_completed_after_days, 7);
     }
 
     #[test]

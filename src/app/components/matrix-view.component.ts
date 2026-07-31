@@ -22,8 +22,8 @@ import { Plotted } from "../models/task.models";
         <!-- Quadrants. Quick wins are tinted because that is where you want to
              be looking first. -->
         <rect x="0" y="0" width="200" height="200" class="q quick" />
-        <rect x="200" y="0" width="200" height="200" class="q" />
-        <rect x="0" y="200" width="200" height="200" class="q" />
+        <rect x="200" y="0" width="200" height="200" class="q big" />
+        <rect x="0" y="200" width="200" height="200" class="q fill" />
         <rect x="200" y="200" width="200" height="200" class="q thankless" />
 
         <line x1="200" y1="0" x2="200" y2="400" class="axis" />
@@ -82,11 +82,20 @@ import { Plotted } from "../models/task.models";
         stroke: var(--border);
         stroke-width: 1;
       }
+      /* The convention from the standard action priority matrix — green for
+         quick wins through to red for thankless — kept muted so the dots stay
+         the thing you read rather than the background. */
       .q.quick {
-        fill: color-mix(in srgb, var(--accent) 10%, var(--panel));
+        fill: color-mix(in srgb, #2ea043 16%, var(--panel));
+      }
+      .q.big {
+        fill: color-mix(in srgb, #d29922 14%, var(--panel));
+      }
+      .q.fill {
+        fill: color-mix(in srgb, var(--ink-faint) 9%, var(--panel));
       }
       .q.thankless {
-        fill: color-mix(in srgb, var(--ink-faint) 8%, var(--panel));
+        fill: color-mix(in srgb, #da3633 13%, var(--panel));
       }
       .axis {
         stroke: var(--border);

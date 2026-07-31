@@ -45,6 +45,14 @@ export interface Board {
 
 export interface Settings {
   dailyFocusGoal: number;
+  hideCompletedAfterDays: number;
+}
+
+/** A project or tag, with how much work carries it. */
+export interface LabelUse {
+  name: string;
+  open: number;
+  done: number;
 }
 
 export interface Data {
@@ -114,5 +122,8 @@ export interface Snapshot {
   summary: TimeSummary;
   matrix: Plotted[];
   stats: Stats;
+  projects: LabelUse[];
+  tags: LabelUse[];
+  settings: Settings;
   date: string;
 }

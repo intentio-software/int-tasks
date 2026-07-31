@@ -34,19 +34,25 @@
         <span class="streak" *ngIf="stats.streakDays > 0" [title]="stats.streakDays + ' day streak'">
           <i class="pi pi-bolt"></i> {{ stats.streakDays }}
         </span>
-        <span class="goal" [class.met]="stats.goalMet" title="Focus sessions today. Change the target here.">
+        <label class="goal" [class.met]="stats.goalMet" title="Focus sessions today. Click the target to change it.">
           <i class="pi" [ngClass]="stats.goalMet ? 'pi-check-circle' : 'pi-circle'"></i>
-          {{ stats.sessionsToday }}/<select
-            class="goal-select"
-            [ngModel]="stats.dailyGoal"
-            (ngModelChange)="tasks.setDailyGoal($event)"
-            aria-label="Daily focus goal"
-          >
-            @for (option of goalOptions; track option) {
-              <option [value]="option">{{ option }}</option>
-            }
-          </select>
-        </span>
+          <span class="done">{{ stats.sessionsToday }}</span>
+          <span class="slash">/</span>
+          <span class="target">
+            {{ stats.dailyGoal }}
+            <i class="pi pi-angle-down"></i>
+            <select
+              class="goal-select"
+              [ngModel]="stats.dailyGoal"
+              (ngModelChange)="tasks.setDailyGoal($event)"
+              aria-label="Daily focus goal"
+            >
+              @for (option of goalOptions; track option) {
+                <option [value]="option">{{ option }}</option>
+              }
+            </select>
+          </span>
+        </label>
         <span class="points" *ngIf="stats.pointsToday > 0" title="Impact finished today">
           +{{ stats.pointsToday }}
         </span>
@@ -56,6 +62,9 @@
       </span>
       <button type="button" class="icon" [title]="theme.label() + ' theme'" (click)="theme.cycle()">
         <i class="pi" [ngClass]="theme.icon()"></i>
+      </button>
+      <button type="button" class="icon" title="Manage projects and tags" (click)="labelsOpen.set(true)">
+        <i class="pi pi-tags"></i>
       </button>
       <button type="button" class="icon" title="About Intentio Tasks" (click)="aboutOpen.set(true)">
         <i class="pi pi-info-circle"></i>
@@ -224,11 +233,23 @@
 @if (editing(); as task) {
   <app-task-detail
     [task]="task"
+    [knownProjects]="tasks.projects()"
+    [knownTags]="tasks.tagNames()"
     (changed)="applyEdit($event)"
     (scored)="applyScore($event)"
     (deleted)="deleteEditing()"
     (closed)="editing.set(null)"
   ></app-task-detail>
+}
+
+@if (labelsOpen()) {
+  <app-labels-dialog
+    [projects]="tasks.projectLabels()"
+    [tags]="tasks.tagLabels()"
+    (renamed)="renameLabel($event)"
+    (remove)="removeLabel($event)"
+    (closed)="labelsOpen.set(false)"
+  ></app-labels-dialog>
 }
 
 @if (aboutOpen()) {

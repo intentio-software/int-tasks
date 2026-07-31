@@ -138,6 +138,71 @@ pub fn find(data: &Data, filter: &Filter) -> Vec<Task> {
     found
 }
 
+/// A project or tag, with how much work carries it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LabelUse {
+    pub name: String,
+    pub open: usize,
+    pub done: usize,
+}
+
+/// Projects in use, with counts, sorted by name.
+pub fn projects(data: &Data) -> Vec<LabelUse> {
+    let mut counts: HashMap<String, (usize, usize)> = HashMap::new();
+    for task in &data.tasks {
+        if let Some(project) = task.project.as_deref().filter(|p| !p.trim().is_empty()) {
+            let entry = counts.entry(project.to_string()).or_insert((0, 0));
+            if task.status.is_done() {
+                entry.1 += 1;
+            } else {
+                entry.0 += 1;
+            }
+        }
+    }
+    into_sorted(counts)
+}
+
+/// Tags in use, with counts, sorted by name.
+pub fn tags(data: &Data) -> Vec<LabelUse> {
+    let mut counts: HashMap<String, (usize, usize)> = HashMap::new();
+    for task in &data.tasks {
+        for tag in task.tags.iter().filter(|tag| !tag.trim().is_empty()) {
+            let entry = counts.entry(tag.clone()).or_insert((0, 0));
+            if task.status.is_done() {
+                entry.1 += 1;
+            } else {
+                entry.0 += 1;
+            }
+        }
+    }
+    into_sorted(counts)
+}
+
+fn into_sorted(counts: HashMap<String, (usize, usize)>) -> Vec<LabelUse> {
+    let mut labels: Vec<LabelUse> = counts
+        .into_iter()
+        .map(|(name, (open, done))| LabelUse { name, open, done })
+        .collect();
+    labels.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    labels
+}
+
+/// Whether a completed task has aged out of the views.
+///
+/// Only ever hidden, never removed: statistics, streaks and points all still
+/// count it. Anything not completed is always visible.
+pub fn is_stale_completion(task: &Task, now_millis: u64, after_days: u32) -> bool {
+    if !task.status.is_done() {
+        return false;
+    }
+    let Some(completed_at) = task.completed_at else {
+        // Completed but unstamped — older data. Keep it rather than vanish it.
+        return false;
+    };
+    let window = after_days as u64 * 24 * 60 * 60 * 1000;
+    now_millis.saturating_sub(completed_at) > window
+}
+
 /// Time recorded against tasks.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimeSummary {
@@ -263,6 +328,51 @@ mod tests {
     fn today_reports_why_each_task_is_there() {
         let data = data_with(vec![task("Overdue", Some("2026-01-01"), false, Status::Todo)]);
         assert_eq!(today(&data, "2026-07-31")[0].reason, TodayReason::Overdue);
+    }
+
+    #[test]
+    fn projects_and_tags_are_counted_by_state() {
+        let mut open = task("Open", None, false, Status::Todo);
+        open.project = Some("Intentio".into());
+        open.tags = vec!["admin".into()];
+        let mut closed = task("Closed", None, false, Status::Done);
+        closed.project = Some("Intentio".into());
+        closed.tags = vec!["admin".into(), "bug".into()];
+        let data = data_with(vec![open, closed]);
+
+        let projects = projects(&data);
+        assert_eq!(projects.len(), 1);
+        assert_eq!((projects[0].open, projects[0].done), (1, 1));
+
+        let tags = tags(&data);
+        assert_eq!(tags.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), vec!["admin", "bug"]);
+    }
+
+    #[test]
+    fn a_completed_task_hides_only_after_the_window() {
+        const DAY: u64 = 24 * 60 * 60 * 1000;
+        let now = 100 * DAY;
+        let mut done = task("Finished", None, false, Status::Done);
+
+        done.completed_at = Some(now - DAY);
+        assert!(!is_stale_completion(&done, now, 2), "yesterday's work is still visible");
+
+        done.completed_at = Some(now - 3 * DAY);
+        assert!(is_stale_completion(&done, now, 2), "three days on, it drops out");
+    }
+
+    #[test]
+    fn open_tasks_never_go_stale() {
+        let open = task("Still going", None, false, Status::Todo);
+        assert!(!is_stale_completion(&open, u64::MAX, 0));
+    }
+
+    #[test]
+    fn a_completion_with_no_timestamp_is_kept() {
+        // Older records may lack the stamp; vanishing them would look like loss.
+        let mut done = task("Legacy", None, false, Status::Done);
+        done.completed_at = None;
+        assert!(!is_stale_completion(&done, u64::MAX, 2));
     }
 
     #[test]
