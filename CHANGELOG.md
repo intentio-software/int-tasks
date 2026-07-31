@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/intentio-software/int-tasks/compare/v1.0.1...v1.1.0) (2026-07-31)
+
+
+### Features
+
+* manage projects and tags, and age out completed work ([b67a679](https://github.com/intentio-software/int-tasks/commit/b67a679daf2b2402a836000c5d7b8e695ac24498))
+
 ## [1.0.1](https://github.com/intentio-software/int-tasks/compare/v1.0.0...v1.0.1) (2026-07-31)
 
 
