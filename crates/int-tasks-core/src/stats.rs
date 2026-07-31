@@ -1,0 +1,232 @@
+//! Streaks, the daily goal, and points.
+//!
+//! All of it is derived from work that already happened — completed tasks and
+//! recorded sessions — so there is no separate score to keep in step, and
+//! nothing to inflate except by doing the work.
+//!
+//! The numbers are deliberately modest. A tool you use every day should not
+//! shout at you, and a streak that punishes a day off stops being motivating
+//! very quickly.
+
+use std::collections::HashSet;
+
+use serde::{Deserialize, Serialize};
+
+use crate::dates::{days_before, local_date};
+use crate::model::{Session, SessionKind};
+use crate::store::Data;
+
+/// Impact assumed for a task nobody scored, so completing unscored work still
+/// counts for something without pretending it was a triumph.
+const UNSCORED_IMPACT: u32 = 3;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Stats {
+    /// Consecutive days, ending today or yesterday, with at least one session.
+    pub streak_days: u32,
+    /// Focus sessions completed today.
+    pub sessions_today: u32,
+    /// How many the user is aiming for.
+    pub daily_goal: u32,
+    pub focus_minutes_today: u64,
+    /// Impact of everything finished today.
+    pub points_today: u32,
+    /// Impact of everything ever finished.
+    pub points_total: u32,
+    pub completed_today: u32,
+    /// True once today's goal is met, so the UI can mark it without recomputing.
+    pub goal_met: bool,
+}
+
+/// Work out the day's standing.
+pub fn stats(
+    data: &Data,
+    sessions: &[Session],
+    today: &str,
+    utc_offset_seconds: i32,
+    daily_goal: u32,
+) -> Stats {
+    // Days on which at least one focus session happened.
+    let active_days: HashSet<String> = sessions
+        .iter()
+        .filter(|session| session.kind == SessionKind::Focus)
+        .map(|session| local_date(session.started_at, utc_offset_seconds))
+        .collect();
+
+    let today_sessions: Vec<&Session> = sessions
+        .iter()
+        .filter(|session| session.kind == SessionKind::Focus)
+        .filter(|session| local_date(session.started_at, utc_offset_seconds) == today)
+        .collect();
+
+    let completed: Vec<&crate::model::Task> = data
+        .tasks
+        .iter()
+        .filter(|task| task.status.is_done())
+        .collect();
+
+    let points_of = |task: &crate::model::Task| task.impact.map(u32::from).unwrap_or(UNSCORED_IMPACT);
+
+    let completed_today: Vec<&&crate::model::Task> = completed
+        .iter()
+        .filter(|task| {
+            task.completed_at
+                .map(|at| local_date(at, utc_offset_seconds) == today)
+                .unwrap_or(false)
+        })
+        .collect();
+
+    let sessions_today = today_sessions.len() as u32;
+
+    Stats {
+        streak_days: streak(&active_days, today),
+        sessions_today,
+        daily_goal,
+        focus_minutes_today: today_sessions.iter().map(|session| session.seconds).sum::<u64>() / 60,
+        points_today: completed_today.iter().map(|task| points_of(task)).sum(),
+        points_total: completed.iter().map(|task| points_of(task)).sum(),
+        completed_today: completed_today.len() as u32,
+        goal_met: daily_goal > 0 && sessions_today >= daily_goal,
+    }
+}
+
+/// Length of the run of active days ending at today or yesterday.
+///
+/// Yesterday counts as the end of the run so that a streak is not reported as
+/// broken at breakfast, before there has been any chance to work.
+fn streak(active_days: &HashSet<String>, today: &str) -> u32 {
+    let start = if active_days.contains(today) {
+        today.to_string()
+    } else {
+        match days_before(today, 1) {
+            Some(yesterday) if active_days.contains(&yesterday) => yesterday,
+            // Neither today nor yesterday: the run is over.
+            _ => return 0,
+        }
+    };
+
+    let mut count = 0u32;
+    let mut cursor = start;
+    while active_days.contains(&cursor) {
+        count += 1;
+        match days_before(&cursor, 1) {
+            Some(previous) => cursor = previous,
+            None => break,
+        }
+    }
+    count
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{Board, Status, Task};
+
+    const TODAY: &str = "2026-07-31";
+    /// Midday UTC on a given date, so offsets in tests do not shift the day.
+    fn at(date: &str) -> u64 {
+        (crate::dates::civil_days(date).unwrap() as u64) * 86_400_000 + 12 * 3_600_000
+    }
+
+    fn focus_on(date: &str) -> Session {
+        Session {
+            id: crate::model::new_id("session"),
+            task_id: None,
+            started_at: at(date),
+            ended_at: at(date) + 1_500_000,
+            seconds: 1500,
+            kind: SessionKind::Focus,
+            completed: true,
+        }
+    }
+
+    fn data_with(tasks: Vec<Task>) -> Data {
+        Data { boards: vec![Board::with_default_lists("Tasks", 0)], tasks, revision: 1 }
+    }
+
+    fn done(title: &str, impact: Option<u8>, completed_on: &str) -> Task {
+        let mut task = Task::new(title, "list_1");
+        task.status = Status::Done;
+        task.impact = impact;
+        task.completed_at = Some(at(completed_on));
+        task
+    }
+
+    #[test]
+    fn consecutive_days_build_a_streak() {
+        let sessions = vec![focus_on("2026-07-31"), focus_on("2026-07-30"), focus_on("2026-07-29")];
+        let stats = stats(&data_with(vec![]), &sessions, TODAY, 0, 4);
+        assert_eq!(stats.streak_days, 3);
+    }
+
+    #[test]
+    fn a_gap_ends_the_streak() {
+        // Missing the 29th, so only two days count.
+        let sessions = vec![focus_on("2026-07-31"), focus_on("2026-07-30"), focus_on("2026-07-28")];
+        assert_eq!(stats(&data_with(vec![]), &sessions, TODAY, 0, 4).streak_days, 2);
+    }
+
+    #[test]
+    fn the_streak_survives_a_morning_with_no_work_yet() {
+        // Nothing today, but yesterday counts — a streak should not read as
+        // broken before the day has had a chance to start.
+        let sessions = vec![focus_on("2026-07-30"), focus_on("2026-07-29")];
+        assert_eq!(stats(&data_with(vec![]), &sessions, TODAY, 0, 4).streak_days, 2);
+    }
+
+    #[test]
+    fn two_days_off_does_end_it() {
+        let sessions = vec![focus_on("2026-07-29"), focus_on("2026-07-28")];
+        assert_eq!(stats(&data_with(vec![]), &sessions, TODAY, 0, 4).streak_days, 0);
+    }
+
+    #[test]
+    fn breaks_do_not_keep_a_streak_alive() {
+        let mut rest = focus_on("2026-07-31");
+        rest.kind = SessionKind::Break;
+        assert_eq!(stats(&data_with(vec![]), &[rest], TODAY, 0, 4).streak_days, 0);
+    }
+
+    #[test]
+    fn several_sessions_in_one_day_are_still_one_day() {
+        let sessions = vec![focus_on("2026-07-31"), focus_on("2026-07-31"), focus_on("2026-07-31")];
+        let stats = stats(&data_with(vec![]), &sessions, TODAY, 0, 4);
+        assert_eq!(stats.streak_days, 1);
+        assert_eq!(stats.sessions_today, 3);
+    }
+
+    #[test]
+    fn the_goal_is_met_only_when_reached() {
+        let sessions = vec![focus_on(TODAY), focus_on(TODAY)];
+        assert!(!stats(&data_with(vec![]), &sessions, TODAY, 0, 4).goal_met);
+        let four = vec![focus_on(TODAY), focus_on(TODAY), focus_on(TODAY), focus_on(TODAY)];
+        assert!(stats(&data_with(vec![]), &four, TODAY, 0, 4).goal_met);
+    }
+
+    #[test]
+    fn points_come_from_the_impact_of_finished_work() {
+        let data = data_with(vec![
+            done("Big", Some(9), TODAY),
+            done("Small", Some(2), TODAY),
+            done("Yesterday", Some(5), "2026-07-30"),
+        ]);
+        let stats = stats(&data, &[], TODAY, 0, 4);
+        assert_eq!(stats.points_today, 11);
+        assert_eq!(stats.points_total, 16);
+        assert_eq!(stats.completed_today, 2);
+    }
+
+    #[test]
+    fn unscored_work_still_counts_modestly() {
+        let data = data_with(vec![done("Unscored", None, TODAY)]);
+        assert_eq!(stats(&data, &[], TODAY, 0, 4).points_today, UNSCORED_IMPACT);
+    }
+
+    #[test]
+    fn open_tasks_score_nothing() {
+        let mut open = Task::new("Not finished", "list_1");
+        open.impact = Some(10);
+        assert_eq!(stats(&data_with(vec![open]), &[], TODAY, 0, 4).points_total, 0);
+    }
+}

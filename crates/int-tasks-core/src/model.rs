@@ -55,8 +55,22 @@ pub struct Task {
     #[serde(default, skip_serializing_if = "is_false")]
     pub today: bool,
 
+    /// The project this belongs to. One per task, so grouping and "show me
+    /// project X" stay unambiguous.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+
+    /// Free-form type labels: bug, admin, deep-work.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
+
+    /// How much finishing this is worth, 1–10.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub impact: Option<u8>,
+
+    /// How much it will cost to finish, 1–10.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<u8>,
 
     /// 1 is highest. Absent means unprioritised, which sorts last.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -90,7 +104,10 @@ impl Task {
             order: 0,
             due: None,
             today: false,
+            project: None,
             tags: Vec::new(),
+            impact: None,
+            effort: None,
             priority: None,
             estimate_minutes: None,
             created_at: now,

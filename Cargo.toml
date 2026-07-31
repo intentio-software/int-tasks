@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/int-tasks-core", "crates/int-tasks-mcp"]
+members = ["crates/int-tasks-core", "crates/int-tasks-mcp", "src-tauri"]
 
 [workspace.package]
 version = "0.1.0"

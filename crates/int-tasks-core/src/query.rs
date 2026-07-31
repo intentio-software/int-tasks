@@ -81,6 +81,7 @@ pub struct Filter {
     pub list_id: Option<String>,
     pub status: Option<Status>,
     pub tag: Option<String>,
+    pub project: Option<String>,
     /// Text matched against title and notes, case-insensitively.
     pub query: Option<String>,
     /// Include completed tasks. Off by default — done work is rarely what you
@@ -103,6 +104,15 @@ pub fn find(data: &Data, filter: &Filter) -> Vec<Task> {
         .filter(|task| filter.list_id.as_ref().map(|id| &task.list_id == id).unwrap_or(true))
         .filter(|task| {
             board_lists.as_ref().map(|lists| lists.contains(&task.list_id)).unwrap_or(true)
+        })
+        .filter(|task| {
+            filter
+                .project
+                .as_ref()
+                .map(|project| {
+                    task.project.as_deref().map(|p| p.eq_ignore_ascii_case(project)).unwrap_or(false)
+                })
+                .unwrap_or(true)
         })
         .filter(|task| {
             filter
@@ -274,6 +284,16 @@ mod tests {
 
         let filter = Filter { query: Some("pomodoro".into()), ..Default::default() };
         assert_eq!(find(&data, &filter).len(), 2);
+    }
+
+    #[test]
+    fn find_filters_by_project() {
+        let mut mine = task("Mine", None, false, Status::Todo);
+        mine.project = Some("Intentio".into());
+        let data = data_with(vec![mine, task("Someone else's", None, false, Status::Todo)]);
+
+        let filter = Filter { project: Some("intentio".into()), ..Default::default() };
+        assert_eq!(find(&data, &filter).len(), 1, "projects match case-insensitively");
     }
 
     #[test]

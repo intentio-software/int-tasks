@@ -22,12 +22,17 @@
 //! # Ok::<(), int_tasks_core::TaskError>(())
 //! ```
 
+pub mod dates;
 pub mod error;
 pub mod model;
+pub mod matrix;
 pub mod query;
+pub mod stats;
 pub mod store;
 
 pub use error::{Result, TaskError};
 pub use model::{Board, List, Session, SessionKind, Status, Task, new_id, now_millis};
+pub use matrix::{Plotted, Quadrant};
+pub use stats::Stats;
 pub use query::{Filter, TaskTime, TimeSummary, TodayEntry, TodayReason};
 pub use store::{Data, Store};

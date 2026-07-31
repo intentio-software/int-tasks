@@ -6,7 +6,7 @@
 
 use serde_json::{json, Value};
 
-use int_tasks_core::{Filter, SessionKind, Status, Store, model, query};
+use int_tasks_core::{Filter, SessionKind, Status, Store, matrix, model, query, stats};
 
 use crate::mcp::{opt_bool, opt_str, opt_str_list, opt_usize, require_str, ServerInfo, Tool, ToolOutput, ToolProvider};
 
@@ -94,7 +94,10 @@ impl ToolProvider for TaskTools {
                         "list_id": {"type": "string", "description": "List to file it under. Omit for the default inbox list."},
                         "due": {"type": "string", "description": "`YYYY-MM-DD`, or `today` / `tomorrow`."},
                         "today": {"type": "boolean", "description": "Pull onto the Today list regardless of due date."},
-                        "tags": {"type": "array", "items": {"type": "string"}},
+                        "project": {"type": "string", "description": "The project this belongs to. One per task."},
+                        "tags": {"type": "array", "items": {"type": "string"}, "description": "Type labels: bug, admin, deep-work."},
+                        "impact": {"type": "integer", "description": "How much finishing it is worth, 1-10. Omit unless the user said."},
+                        "effort": {"type": "integer", "description": "How much it will cost, 1-10. Omit unless the user said."},
                         "priority": {"type": "integer", "description": "1 is highest. Omit if unstated."},
                         "estimate_minutes": {"type": "integer", "description": "Rough size, for planning against pomodoro sessions."}
                     }),
@@ -115,6 +118,7 @@ impl ToolProvider for TaskTools {
                         "list_id": {"type": "string"},
                         "status": {"type": "string", "description": "todo, doing or done."},
                         "tag": {"type": "string"},
+                        "project": {"type": "string"},
                         "query": {"type": "string", "description": "Text matched against title and notes."},
                         "include_done": {"type": "boolean", "description": "Default false."},
                         "limit": {"type": "integer", "description": "Default 100."}
@@ -137,7 +141,10 @@ impl ToolProvider for TaskTools {
                         "notes": {"type": "string"},
                         "due": {"type": "string", "description": "`YYYY-MM-DD`, `today`, `tomorrow`, or null to clear."},
                         "today": {"type": "boolean"},
-                        "tags": {"type": "array", "items": {"type": "string"}},
+                        "project": {"type": "string", "description": "The project this belongs to. One per task."},
+                        "tags": {"type": "array", "items": {"type": "string"}, "description": "Type labels: bug, admin, deep-work."},
+                        "impact": {"type": "integer", "description": "How much finishing it is worth, 1-10. Omit unless the user said."},
+                        "effort": {"type": "integer", "description": "How much it will cost, 1-10. Omit unless the user said."},
                         "priority": {"type": "integer"},
                         "estimate_minutes": {"type": "integer"}
                     }),
@@ -214,6 +221,24 @@ impl ToolProvider for TaskTools {
                 ),
             ),
             Tool::new(
+                "matrix",
+                "Open tasks placed on the impact/effort matrix, most worth doing first. Each carries its quadrant (quick-win, big-bet, fill-in, thankless) and an urgency derived from its due date and priority. Only tasks with both scores appear.",
+                Self::object(json!({}), &[]),
+            ),
+            Tool::new(
+                "suggest_task",
+                "Pick something worth doing now. Use low_energy when the user says they are tired, stuck or sluggish: it returns the cheapest task that still pays rather than the most valuable one.",
+                Self::object(
+                    json!({"low_energy": {"type": "boolean", "description": "Default false."}}),
+                    &[],
+                ),
+            ),
+            Tool::new(
+                "stats",
+                "The day's standing: focus streak, sessions against the daily goal, and impact points from work finished. All derived from what actually happened.",
+                Self::object(json!({}), &[]),
+            ),
+            Tool::new(
                 "store_info",
                 "Where the store lives and what is in it.",
                 Self::object(json!({}), &[]),
@@ -244,8 +269,12 @@ impl ToolProvider for TaskTools {
                 let priority = args.get("priority").and_then(Value::as_u64).map(|p| p as u8);
                 let estimate = args.get("estimate_minutes").and_then(Value::as_u64).map(|m| m as u32);
                 let notes = opt_str(args, "notes");
+                let project = opt_str(args, "project");
+                let impact = args.get("impact").and_then(Value::as_u64).map(|v| (v as u8).clamp(1, 10));
+                let effort = args.get("effort").and_then(Value::as_u64).map(|v| (v as u8).clamp(1, 10));
 
-                if due.is_some() || !tags.is_empty() || today || priority.is_some() || estimate.is_some() || notes.is_some() {
+                if due.is_some() || !tags.is_empty() || today || priority.is_some() || estimate.is_some()
+                    || notes.is_some() || project.is_some() || impact.is_some() || effort.is_some() {
                     store
                         .update(|data| {
                             let stored = data.task_mut(&task.id).expect("just added");
@@ -266,6 +295,15 @@ impl ToolProvider for TaskTools {
                             }
                             if notes.is_some() {
                                 stored.notes = notes;
+                            }
+                            if project.is_some() {
+                                stored.project = project;
+                            }
+                            if impact.is_some() {
+                                stored.impact = impact;
+                            }
+                            if effort.is_some() {
+                                stored.effort = effort;
                             }
                             stored.touch();
                             Ok(())
@@ -298,6 +336,7 @@ impl ToolProvider for TaskTools {
                     list_id: opt_str(args, "list_id"),
                     status,
                     tag: opt_str(args, "tag"),
+                    project: opt_str(args, "project"),
                     query: opt_str(args, "query"),
                     include_done: opt_bool(args, "include_done", false),
                     limit: Some(opt_usize(args, "limit", 100)),
@@ -337,6 +376,12 @@ impl ToolProvider for TaskTools {
                 });
                 let today = args.get("today").and_then(Value::as_bool);
                 let tags = args.get("tags").map(|_| opt_str_list(args, "tags"));
+                let project = args.get("project").map(|value| match value {
+                    Value::Null => None,
+                    other => other.as_str().map(str::to_string),
+                });
+                let impact = args.get("impact").map(|v| v.as_u64().map(|n| (n as u8).clamp(1, 10)));
+                let effort = args.get("effort").map(|v| v.as_u64().map(|n| (n as u8).clamp(1, 10)));
                 let priority = args.get("priority").map(|value| value.as_u64().map(|p| p as u8));
                 let estimate = args.get("estimate_minutes").map(|value| value.as_u64().map(|m| m as u32));
 
@@ -359,6 +404,15 @@ impl ToolProvider for TaskTools {
                         }
                         if let Some(tags) = tags {
                             task.tags = tags;
+                        }
+                        if let Some(project) = project {
+                            task.project = project;
+                        }
+                        if let Some(impact) = impact {
+                            task.impact = impact;
+                        }
+                        if let Some(effort) = effort {
+                            task.effort = effort;
                         }
                         if let Some(priority) = priority {
                             task.priority = priority;
@@ -454,6 +508,33 @@ impl ToolProvider for TaskTools {
                     "unattributed_minutes": summary.unattributed_seconds / 60,
                     "by_task": summary.by_task,
                 })))
+            }
+
+            "matrix" => {
+                let data = store.read().map_err(err)?;
+                let plotted = matrix::plot(&data, &self.today());
+                Ok(ToolOutput::json(&json!({ "count": plotted.len(), "tasks": plotted })))
+            }
+
+            "suggest_task" => {
+                let data = store.read().map_err(err)?;
+                let low_energy = opt_bool(args, "low_energy", false);
+                match matrix::suggest(&data, &self.today(), low_energy) {
+                    Some(picked) => Ok(ToolOutput::json(&json!({ "suggestion": picked, "lowEnergy": low_energy }))),
+                    None => Ok(ToolOutput::json(&json!({
+                        "suggestion": Value::Null,
+                        "note": "Nothing is scored yet. Set impact and effort on a few tasks to get a suggestion."
+                    }))),
+                }
+            }
+
+            "stats" => {
+                let data = store.read().map_err(err)?;
+                let sessions = store.sessions().map_err(err)?;
+                let offset = chrono::Local::now().offset().local_minus_utc();
+                let stats = stats::stats(&data, &sessions, &self.today(), offset, 4);
+                let value = serde_json::to_value(&stats).map_err(|err| err.to_string())?;
+                Ok(ToolOutput::json(&value))
             }
 
             "store_info" => {
@@ -622,6 +703,59 @@ mod tests {
         call(&mut t, "add_task", json!({"title": "Unrelated", "notes": "mentions invoices"}));
         call(&mut t, "add_task", json!({"title": "Send invoices"}));
         assert_eq!(call(&mut t, "list_tasks", json!({"query": "INVOICES"}))["count"], 2);
+    }
+
+    #[test]
+    fn scoring_places_a_task_on_the_matrix() {
+        let mut t = tools("matrix");
+        call(&mut t, "add_task", json!({"title": "Quick win", "impact": 9, "effort": 2}));
+        call(&mut t, "add_task", json!({"title": "Unscored"}));
+
+        let matrix = call(&mut t, "matrix", json!({}));
+        assert_eq!(matrix["count"], 1, "only scored tasks are placed");
+        assert_eq!(matrix["tasks"][0]["quadrant"], "quick-win");
+    }
+
+    #[test]
+    fn a_low_energy_suggestion_is_the_cheap_one() {
+        let mut t = tools("suggest");
+        call(&mut t, "add_task", json!({"title": "Big and brilliant", "impact": 10, "effort": 9}));
+        call(&mut t, "add_task", json!({"title": "Small and dull", "impact": 3, "effort": 1}));
+
+        let tired = call(&mut t, "suggest_task", json!({"low_energy": true}));
+        assert_eq!(tired["suggestion"]["title"], "Small and dull");
+        let fresh = call(&mut t, "suggest_task", json!({}));
+        assert_eq!(fresh["suggestion"]["title"], "Small and dull", "best ratio still wins");
+    }
+
+    #[test]
+    fn suggesting_with_nothing_scored_explains_itself() {
+        let mut t = tools("no-scores");
+        call(&mut t, "add_task", json!({"title": "Unscored"}));
+        let result = call(&mut t, "suggest_task", json!({}));
+        assert!(result["suggestion"].is_null());
+        assert!(result["note"].as_str().unwrap().contains("Set impact and effort"));
+    }
+
+    #[test]
+    fn tasks_filter_by_project() {
+        let mut t = tools("project");
+        call(&mut t, "add_task", json!({"title": "Mine", "project": "Intentio"}));
+        call(&mut t, "add_task", json!({"title": "Other", "project": "Elsewhere"}));
+        assert_eq!(call(&mut t, "list_tasks", json!({"project": "intentio"}))["count"], 1);
+    }
+
+    #[test]
+    fn stats_report_the_days_standing() {
+        let mut t = tools("stats");
+        let added = call(&mut t, "add_task", json!({"title": "Worth doing", "impact": 7}));
+        let id = added["added"]["id"].as_str().unwrap().to_string();
+        call(&mut t, "complete_task", json!({"task_id": id}));
+
+        let stats = call(&mut t, "stats", json!({}));
+        assert_eq!(stats["pointsToday"], 7);
+        assert_eq!(stats["completedToday"], 1);
+        assert_eq!(stats["dailyGoal"], 4);
     }
 
     #[test]

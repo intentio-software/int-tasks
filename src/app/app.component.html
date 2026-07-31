@@ -1,0 +1,202 @@
+<!-- The About backdrop sits at z-index 3000; the toast must clear it. -->
+<p-toast position="bottom-right" [baseZIndex]="4000">
+  <ng-template #message let-message>
+    <div class="update-toast">
+      <span class="p-toast-message-icon pi pi-info-circle"></span>
+      <div class="p-toast-message-text">
+        <span class="p-toast-summary">{{ message.summary }}</span>
+        <div class="p-toast-detail">{{ message.detail }}</div>
+        @if (message.data) {
+          <p-button label="Update Now" size="small" styleClass="mt-2" (onClick)="installUpdate(message)" />
+        }
+      </div>
+    </div>
+  </ng-template>
+</p-toast>
+
+<div class="shell">
+  <header class="titlebar">
+    <div class="left">
+      <i class="pi pi-check-square brand"></i>
+      <span class="name">Intentio Tasks</span>
+    </div>
+
+    <div class="center">
+      <div class="views" role="group" aria-label="View">
+        <button type="button" [class.on]="view() === 'today'" (click)="view.set('today')">Today</button>
+        <button type="button" [class.on]="view() === 'board'" (click)="view.set('board')">Board</button>
+        <button type="button" [class.on]="view() === 'matrix'" (click)="view.set('matrix')">Matrix</button>
+      </div>
+    </div>
+
+    <div class="right">
+      @if (tasks.stats(); as stats) {
+        <span class="streak" *ngIf="stats.streakDays > 0" [title]="stats.streakDays + ' day streak'">
+          <i class="pi pi-bolt"></i> {{ stats.streakDays }}
+        </span>
+        <span class="goal" [class.met]="stats.goalMet" [title]="'Focus sessions today, goal ' + stats.dailyGoal">
+          <i class="pi" [ngClass]="stats.goalMet ? 'pi-check-circle' : 'pi-circle'"></i>
+          {{ stats.sessionsToday }}/{{ stats.dailyGoal }}
+        </span>
+        <span class="points" *ngIf="stats.pointsToday > 0" title="Impact finished today">
+          +{{ stats.pointsToday }}
+        </span>
+      }
+      <span class="focus-total" title="Focus time recorded">
+        <i class="pi pi-clock"></i> {{ focusToday() }}
+      </span>
+      <button type="button" class="icon" [title]="theme.label() + ' theme'" (click)="theme.cycle()">
+        <i class="pi" [ngClass]="theme.icon()"></i>
+      </button>
+      <button type="button" class="icon" title="About Intentio Tasks" (click)="aboutOpen.set(true)">
+        <i class="pi pi-info-circle"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Capture is always the first thing on screen and always focused-first. -->
+  <div class="capture-bar">
+    <i class="pi pi-plus"></i>
+    <input
+      id="capture"
+      type="text"
+      placeholder="What needs doing? Type it and press Enter."
+      autocomplete="off"
+      spellcheck="false"
+      [ngModel]="draft()"
+      (ngModelChange)="draft.set($event)"
+      (keydown.enter)="capture()"
+    />
+    <kbd>↵</kbd>
+  </div>
+
+  @if (tasks.timer(); as timer) {
+    @if (timer.running) {
+      <div class="timer-bar" [class.break]="timer.kind === 'break'">
+        <i class="pi" [ngClass]="timer.kind === 'break' ? 'pi-pause-circle' : 'pi-play-circle'"></i>
+        <span class="clock">{{ clock() }}</span>
+        <span class="on-task">{{ timer.taskTitle || (timer.kind === 'break' ? 'Break' : 'Focus') }}</span>
+        <button type="button" (click)="stopTimer()">Stop</button>
+      </div>
+    }
+  }
+
+  <main class="content">
+    @if (view() === 'today') {
+      <section class="today">
+        <div class="section-head">
+          <h2>Today</h2>
+          <span class="count">{{ tasks.today().length }}</span>
+          <span class="date">{{ tasks.date() }}</span>
+          <button type="button" class="ghost small" (click)="startBreak()">Take a break</button>
+        </div>
+
+        @if (tasks.today().length) {
+          <app-task-row
+            *ngFor="let entry of tasks.today(); trackBy: trackTask"
+            [task]="entry"
+            [reason]="entry.reason"
+            [running]="isRunningFor(entry)"
+            (toggled)="toggleDone(entry, $event)"
+            (timerToggled)="toggleTimerFor(entry)"
+            (opened)="open(entry)"
+          ></app-task-row>
+        } @else {
+          <div class="empty">
+            <i class="pi pi-check-circle"></i>
+            <p>Nothing due today.</p>
+            <span>Capture something above, or star a task on the board to pull it here.</span>
+          </div>
+        }
+      </section>
+    } @else if (view() === 'matrix') {
+      <section class="matrix">
+        <div class="section-head">
+          <h2>Impact vs effort</h2>
+          <span class="count">{{ tasks.matrix().length }}</span>
+          <button type="button" class="ghost small" (click)="suggest(false)">Best next</button>
+          <button type="button" class="ghost small" (click)="suggest(true)">I'm sluggish</button>
+        </div>
+
+        @if (suggestion(); as picked) {
+          <div class="suggestion">
+            <div>
+              <span class="lead">Try this one</span>
+              <strong>{{ picked.title }}</strong>
+              <span class="why">
+                impact {{ picked.impact }} · effort {{ picked.effort }} · urgency {{ picked.urgency }}
+              </span>
+            </div>
+            <button type="button" (click)="startSuggested()">Start 25 min</button>
+          </div>
+        }
+
+        <app-matrix-view
+          [tasks]="tasks.matrix()"
+          [selectedId]="suggestion()?.id ?? null"
+          (picked)="open($event)"
+        ></app-matrix-view>
+      </section>
+    } @else {
+      <section class="board">
+        <div class="section-head">
+          <h2>{{ tasks.activeBoard()?.name }}</h2>
+          <span class="count">{{ tasks.openCount() }} open</span>
+          <button type="button" class="ghost small" (click)="addList()">Add list</button>
+        </div>
+
+        <div class="columns">
+          @for (list of sortedLists(); track list.id) {
+            <div class="column">
+              <div class="column-head">
+                <span class="column-name">{{ list.name }}</span>
+                <span class="column-count">{{ tasksIn(list.id).length }}</span>
+              </div>
+              <div
+                class="cards"
+                cdkDropList
+                [id]="list.id"
+                [cdkDropListData]="tasksIn(list.id)"
+                [cdkDropListConnectedTo]="listIds()"
+                (cdkDropListDropped)="onDrop($event, list.id)"
+              >
+                @for (task of tasksIn(list.id); track task.id) {
+                  <div class="card" cdkDrag [cdkDragData]="task">
+                    <app-task-row
+                      [task]="task"
+                      [running]="isRunningFor(task)"
+                      (toggled)="toggleDone(task, $event)"
+                      (timerToggled)="toggleTimerFor(task)"
+                      (opened)="open(task)"
+                    ></app-task-row>
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </section>
+    }
+  </main>
+
+  <footer class="statusbar">
+    <span>{{ tasks.openCount() }} open</span>
+    <span class="sep">·</span>
+    <span class="path" [title]="tasks.storePath()">{{ tasks.storePath() }}</span>
+    <span class="error" *ngIf="tasks.error() as error">{{ error }}</span>
+  </footer>
+</div>
+
+@if (editing(); as task) {
+  <app-task-detail
+    [task]="task"
+    (changed)="applyEdit($event)"
+    (scored)="applyScore($event)"
+    (deleted)="deleteEditing()"
+    (closed)="editing.set(null)"
+  ></app-task-detail>
+}
+
+@if (aboutOpen()) {
+  <app-about-dialog [version]="appVersion()" (closed)="aboutOpen.set(false)"></app-about-dialog>
+}
