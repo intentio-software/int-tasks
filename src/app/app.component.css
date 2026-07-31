@@ -199,6 +199,12 @@ button.icon:hover {
   padding: 1rem 0 3rem;
 }
 
+/* The board manages its own scrolling in both directions. */
+.content.board-view {
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
 .today {
   max-width: 46rem;
   margin: 0 auto;
@@ -282,26 +288,41 @@ button.ghost:hover {
 
 /* ------------------------------------------------------------------- board */
 
+/* The board fills the pane so its horizontal scrollbar lands at the bottom
+   edge. Left to size itself, the strip of columns is only as tall as the
+   tallest one and the scrollbar appears floating in the middle of the view. */
 .board {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
   padding: 0 1rem;
 }
 
 .columns {
+  flex: 1;
+  min-height: 0;
   display: flex;
   gap: 0.85rem;
-  align-items: flex-start;
+  /* Equal heights: a board of ragged columns reads as broken rather than empty. */
+  align-items: stretch;
   overflow-x: auto;
-  padding: 0 0.7rem 1rem;
+  overflow-y: hidden;
+  padding: 0 0.7rem 0.5rem;
 }
 
+/* Columns share the width when they fit and only scroll once they cannot,
+   so three lists fill the window instead of leaving a gap, and eight scroll. */
 .column {
-  flex: 0 0 17rem;
+  flex: 1 1 15rem;
+  min-width: 13rem;
+  max-width: 22rem;
   display: flex;
   flex-direction: column;
+  min-height: 0;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: var(--panel);
-  max-height: 100%;
 }
 
 .column-head {
@@ -325,9 +346,12 @@ button.ghost:hover {
   font-size: 0.7rem;
 }
 
+/* Each column scrolls its own cards, so one long list does not stretch the
+   board or force the whole pane to scroll. */
 .cards {
-  padding: 0.35rem;
+  flex: 1;
   min-height: 3rem;
+  padding: 0.35rem;
   overflow-y: auto;
 }
 
