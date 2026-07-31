@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/intentio-software/int-tasks/compare/v1.2.0...v1.3.0) (2026-07-31)
+
+
+### Features
+
+* read (project) and [tag] out of a captured line ([e2ab372](https://github.com/intentio-software/int-tasks/commit/e2ab372b19f149b7393670fcc0a757afc9271039))
+
 # [1.2.0](https://github.com/intentio-software/int-tasks/compare/v1.1.0...v1.2.0) (2026-07-31)
 
 
