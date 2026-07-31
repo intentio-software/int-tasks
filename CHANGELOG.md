@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/intentio-software/int-tasks/compare/v1.1.0...v1.2.0) (2026-07-31)
+
+
+### Features
+
+* right-click menu on tasks ([56a0210](https://github.com/intentio-software/int-tasks/commit/56a0210141501deeea16990e3f0c32c93838e8a7))
+
 # [1.1.0](https://github.com/intentio-software/int-tasks/compare/v1.0.1...v1.1.0) (2026-07-31)
 
 
