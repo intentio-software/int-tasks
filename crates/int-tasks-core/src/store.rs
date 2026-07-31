@@ -216,6 +216,29 @@ impl Store {
     // -----------------------------------------------------------------------
 
     /// Capture a task from nothing but a title.
+    /// Capture a typed line, reading `(project)` and `[tag]` markers out of it.
+    ///
+    /// This is what both the app's capture box and the MCP `add_task` tool go
+    /// through, so a line typed by hand and the same line handed to an agent
+    /// produce the same task.
+    pub fn capture(&self, input: &str, list_id: Option<&str>) -> Result<Task> {
+        let captured = crate::capture::parse(input);
+        let task = self.add_task(&captured.title, list_id)?;
+        if captured.project.is_none() && captured.tags.is_empty() {
+            return Ok(task);
+        }
+        self.update(|data| {
+            let stored = data.task_mut(&task.id).ok_or(TaskError::TaskNotFound(task.id.clone()))?;
+            if let Some(project) = captured.project {
+                stored.project = Some(project);
+            }
+            if !captured.tags.is_empty() {
+                stored.tags = captured.tags;
+            }
+            Ok(stored.clone())
+        })
+    }
+
     pub fn add_task(&self, title: &str, list_id: Option<&str>) -> Result<Task> {
         let title = title.trim();
         if title.is_empty() {
@@ -561,6 +584,29 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("int-tasks-{}-{name}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         Store::open(&dir).expect("store")
+    }
+
+    #[test]
+    fn capturing_a_typed_line_files_it() {
+        let store = temp_store("capture-markers");
+        let task = store.capture("(stm) [chore] clean up the front end login page", None).unwrap();
+        assert_eq!(task.title, "clean up the front end login page");
+        assert_eq!(task.project.as_deref(), Some("stm"));
+        assert_eq!(task.tags, vec!["chore"]);
+
+        // And it is what was actually written, not just what was returned.
+        let stored = store.read().unwrap();
+        let found = stored.tasks.iter().find(|t| t.id == task.id).expect("stored");
+        assert_eq!(found.project.as_deref(), Some("stm"));
+    }
+
+    #[test]
+    fn capturing_a_plain_line_leaves_it_plain() {
+        let store = temp_store("capture-plain");
+        let task = store.capture("call the bank", None).unwrap();
+        assert_eq!(task.title, "call the bank");
+        assert!(task.project.is_none());
+        assert!(task.tags.is_empty());
     }
 
     #[test]

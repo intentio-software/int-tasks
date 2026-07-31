@@ -78,7 +78,7 @@
     <input
       id="capture"
       type="text"
-      placeholder="What needs doing? Type it and press Enter."
+      placeholder="What needs doing?  (project) [tag] then the task — press Enter."
       autocomplete="off"
       spellcheck="false"
       [ngModel]="draft()"
@@ -87,6 +87,16 @@
     />
     <kbd>↵</kbd>
   </div>
+
+  <!-- Shown only while typing a prefix, so it teaches the syntax once and then
+       stays out of the way. -->
+  @if (capturePreview(); as preview) {
+    <div class="capture-preview">
+      <span class="chip project" *ngIf="preview.project">{{ preview.project }}</span>
+      <span class="chip" *ngFor="let tag of preview.tags">{{ tag }}</span>
+      <span class="preview-title">{{ preview.title }}</span>
+    </div>
+  }
 
   @if (tasks.timer(); as timer) {
     @if (timer.running) {

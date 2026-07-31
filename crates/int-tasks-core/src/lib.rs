@@ -22,6 +22,7 @@
 //! # Ok::<(), int_tasks_core::TaskError>(())
 //! ```
 
+pub mod capture;
 pub mod dates;
 pub mod error;
 pub mod model;
@@ -30,6 +31,7 @@ pub mod query;
 pub mod stats;
 pub mod store;
 
+pub use capture::{parse as parse_capture, Captured};
 pub use error::{Result, TaskError};
 pub use model::{Board, List, Session, SessionKind, Status, Task, new_id, now_millis};
 pub use matrix::{Plotted, Quadrant};

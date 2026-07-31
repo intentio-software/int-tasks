@@ -69,6 +69,43 @@ export class AppComponent implements OnInit, OnDestroy {
   /** Goal options that stay achievable; a target never met means nothing. */
   readonly goalOptions = [2, 3, 4, 5, 6, 8, 10];
 
+  /**
+   * What the typed line will become, shown under the capture box.
+   *
+   * The Rust parser is authoritative — this only previews, and only while a
+   * marker is actually being typed, so it costs nothing to be a little less
+   * exhaustive than the real thing.
+   */
+  readonly capturePreview = computed(() => {
+    let rest = this.draft().trim();
+    if (!rest.startsWith("(") && !rest.startsWith("[")) {
+      return null;
+    }
+    let project: string | null = null;
+    const tags: string[] = [];
+    for (;;) {
+      // Brackets must match their own kind, as the Rust parser requires.
+      const match = /^(?:\(([^\s()[\]]+)\)|\[([^\s()[\]]+)\])\s*/.exec(rest);
+      if (!match) {
+        break;
+      }
+      if (match[1] !== undefined) {
+        if (project) {
+          break;
+        }
+        project = match[1];
+      } else {
+        tags.push(match[2]);
+      }
+      rest = rest.slice(match[0].length);
+    }
+    // Markers with nothing after them are kept as the title, as the store does.
+    if (!rest || (!project && !tags.length)) {
+      return null;
+    }
+    return { title: rest, project, tags };
+  });
+
   /** The matrix, narrowed to the chosen project. */
   readonly visibleMatrix = computed(() => {
     const project = this.projectFilter();

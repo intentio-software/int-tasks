@@ -89,7 +89,7 @@ impl ToolProvider for TaskTools {
                 "Capture a task. Only a title is required — omit anything the user did not specify rather than guessing. Lands in the first list of the first board unless a list is given.",
                 Self::object(
                     json!({
-                        "title": {"type": "string", "description": "What needs doing."},
+                        "title": {"type": "string", "description": "What needs doing. A leading `(project)` and `[tag]` are read out of it — `(stm) [chore] clean up the login page` files the task under project `stm`, tagged `chore`. Explicit project/tags arguments win over the title."},
                         "notes": {"type": "string", "description": "Longer detail, if the user gave any."},
                         "list_id": {"type": "string", "description": "List to file it under. Omit for the default inbox list."},
                         "due": {"type": "string", "description": "`YYYY-MM-DD`, or `today` / `tomorrow`."},
@@ -291,7 +291,7 @@ impl ToolProvider for TaskTools {
                     None => None,
                 };
 
-                let task = store.add_task(&title, opt_str(args, "list_id").as_deref()).map_err(err)?;
+                let task = store.capture(&title, opt_str(args, "list_id").as_deref()).map_err(err)?;
                 let tags = opt_str_list(args, "tags");
                 let today = opt_bool(args, "today", false);
                 let priority = args.get("priority").and_then(Value::as_u64).map(|p| p as u8);
@@ -706,6 +706,26 @@ mod tests {
         let added = call(&mut t, "add_task", json!({"title": "Call the bank"}));
         assert_eq!(added["added"]["title"], "Call the bank");
         assert!(added["added"]["due"].is_null(), "no due date should be invented");
+    }
+
+    #[test]
+    fn an_agent_gets_the_same_reading_of_a_typed_line() {
+        let mut t = tools("capture-markers");
+        let added = call(&mut t, "add_task", json!({"title": "(stm) [chore] clean up the login page"}));
+        assert_eq!(added["added"]["title"], "clean up the login page");
+        assert_eq!(added["added"]["project"], "stm");
+        assert_eq!(added["added"]["tags"], json!(["chore"]));
+    }
+
+    #[test]
+    fn an_explicit_project_beats_the_one_in_the_title() {
+        // An agent told which project to use was told for a reason.
+        let mut t = tools("capture-override");
+        let added = call(&mut t, "add_task", json!({
+            "title": "(stm) ship the thing", "project": "acme"
+        }));
+        assert_eq!(added["added"]["title"], "ship the thing");
+        assert_eq!(added["added"]["project"], "acme");
     }
 
     #[test]

@@ -137,7 +137,7 @@ fn set_hide_completed_after_days(
 
 #[tauri::command]
 fn add_task(state: State<'_, AppState>, title: String, list_id: Option<String>) -> Result<Task, String> {
-    state.store.add_task(&title, list_id.as_deref()).map_err(fail)
+    state.store.capture(&title, list_id.as_deref()).map_err(fail)
 }
 
 #[tauri::command]

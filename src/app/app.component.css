@@ -604,3 +604,26 @@ button.ghost:hover {
 .goal {
   cursor: default;
 }
+
+/* The live reading of a typed capture line: what the prefix will become. */
+.capture-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.35rem 0 0 2.1rem;
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+}
+.capture-preview .chip {
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.capture-preview .chip.project {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.capture-preview .preview-title {
+  color: var(--ink-muted);
+}
