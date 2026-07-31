@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/intentio-software/int-tasks/compare/v1.0.0...v1.0.1) (2026-07-31)
+
+
+### Bug Fixes
+
+* make the board fill the pane and stop the scrollbar floating mid-view ([e5441b0](https://github.com/intentio-software/int-tasks/commit/e5441b0d95013bda67197209318f70df85681597))
+
 # 1.0.0 (2026-07-31)
 
 
