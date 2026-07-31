@@ -3,12 +3,12 @@
 //! Every command goes through `int-tasks-core` — the same crate the MCP server
 //! uses — so the app and an agent see one store with one set of rules.
 
+mod menu;
 mod timer;
 
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{TrayIcon, TrayIconBuilder};
 use tauri::{AppHandle, Manager, State};
 
@@ -339,95 +339,6 @@ fn has_native_menu() -> bool {
     cfg!(desktop)
 }
 
-fn build_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
-    use tauri::menu::Submenu;
-
-    let app_menu = Submenu::with_items(
-        app,
-        "Intentio Tasks",
-        true,
-        &[
-            &MenuItem::with_id(app, "about", "About Intentio Tasks", true, None::<&str>)?,
-            &MenuItem::with_id(app, "check-updates", "Check for Updates…", true, None::<&str>)?,
-            &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::services(app, None)?,
-            &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::hide(app, None)?,
-            &PredefinedMenuItem::hide_others(app, None)?,
-            &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::quit(app, None)?,
-        ],
-    )?;
-
-    let file_menu = Submenu::with_items(
-        app,
-        "File",
-        true,
-        &[
-            &MenuItem::with_id(app, "new-task", "New Task", true, Some("CmdOrCtrl+N"))?,
-            &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "new-board", "New Board…", true, None::<&str>)?,
-            &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::close_window(app, None)?,
-        ],
-    )?;
-
-    let edit_menu = Submenu::with_items(
-        app,
-        "Edit",
-        true,
-        &[
-            &PredefinedMenuItem::undo(app, None)?,
-            &PredefinedMenuItem::redo(app, None)?,
-            &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::cut(app, None)?,
-            &PredefinedMenuItem::copy(app, None)?,
-            &PredefinedMenuItem::paste(app, None)?,
-            &PredefinedMenuItem::select_all(app, None)?,
-        ],
-    )?;
-
-    let view_menu = Submenu::with_items(
-        app,
-        "View",
-        true,
-        &[
-            &MenuItem::with_id(app, "view-today", "Today", true, Some("CmdOrCtrl+1"))?,
-            &MenuItem::with_id(app, "view-board", "Board", true, Some("CmdOrCtrl+2"))?,
-            &MenuItem::with_id(app, "view-matrix", "Matrix", true, Some("CmdOrCtrl+3"))?,
-            &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "toggle-theme", "Switch Theme", true, None::<&str>)?,
-            &PredefinedMenuItem::separator(app)?,
-            &PredefinedMenuItem::fullscreen(app, None)?,
-        ],
-    )?;
-
-    let timer_menu = Submenu::with_items(
-        app,
-        "Timer",
-        true,
-        &[
-            &MenuItem::with_id(app, "timer-start", "Start Focus Session", true, Some("CmdOrCtrl+T"))?,
-            &MenuItem::with_id(app, "timer-break", "Start Break", true, None::<&str>)?,
-            &MenuItem::with_id(app, "timer-stop", "Stop Timer", true, Some("CmdOrCtrl+Shift+T"))?,
-        ],
-    )?;
-
-    let help_menu = Submenu::with_items(
-        app,
-        "Help",
-        true,
-        &[
-            &MenuItem::with_id(app, "about", "About Intentio Tasks", true, None::<&str>)?,
-            &MenuItem::with_id(app, "check-updates", "Check for Updates…", true, None::<&str>)?,
-            &PredefinedMenuItem::separator(app)?,
-            &MenuItem::with_id(app, "website", "Intentio Software", true, None::<&str>)?,
-        ],
-    )?;
-
-    Menu::with_items(app, &[&app_menu, &file_menu, &edit_menu, &view_menu, &timer_menu, &help_menu])
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let root = Store::default_root().expect("a home directory");
@@ -446,10 +357,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .setup(move |app| {
             let handle = app.handle();
-            app.set_menu(build_menu(handle)?)?;
-            handle.on_menu_event(|app, event| {
-                let _ = app.emit_menu(event.id().as_ref());
-            });
+            menu::install(handle)?;
 
             // The tray is where the countdown lives, so the timer is visible
             // with the window closed.
@@ -501,16 +409,4 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
-}
-
-/// Forward a native menu click to the frontend, which owns the behaviour.
-trait MenuBridge {
-    fn emit_menu(&self, id: &str) -> tauri::Result<()>;
-}
-
-impl MenuBridge for AppHandle {
-    fn emit_menu(&self, id: &str) -> tauri::Result<()> {
-        use tauri::Emitter;
-        self.emit("menu-action", id.to_string())
-    }
 }

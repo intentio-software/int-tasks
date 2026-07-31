@@ -352,6 +352,9 @@ export class AppComponent implements OnInit, OnDestroy {
       case "view-matrix":
         this.view.set("matrix");
         break;
+      case "manage-labels":
+        this.labelsOpen.set(true);
+        break;
       case "toggle-theme":
         this.theme.cycle();
         break;
