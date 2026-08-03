@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/intentio-software/int-tasks/compare/v1.4.0...v1.5.0) (2026-08-03)
+
+
+### Features
+
+* pause from the menu bar, and ask what unattributed time was for ([023824b](https://github.com/intentio-software/int-tasks/commit/023824b33ccc0860af6906caa2b9745f2d5cb6bf))
+
 # [1.4.0](https://github.com/intentio-software/int-tasks/compare/v1.3.0...v1.4.0) (2026-07-31)
 
 
