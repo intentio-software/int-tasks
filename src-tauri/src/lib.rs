@@ -308,6 +308,16 @@ fn stop_timer(app: AppHandle, state: State<'_, AppState>) -> Result<TimerState, 
 }
 
 #[tauri::command]
+fn pause_timer(app: AppHandle, state: State<'_, AppState>) -> TimerState {
+    timer::pause(&app, state.timer.clone(), state.tray())
+}
+
+#[tauri::command]
+fn resume_timer(app: AppHandle, state: State<'_, AppState>) -> TimerState {
+    timer::resume(&app, state.timer.clone(), state.tray())
+}
+
+#[tauri::command]
 fn timer_state(state: State<'_, AppState>) -> TimerState {
     state.timer.snapshot()
 }
@@ -365,16 +375,69 @@ pub fn run() {
                 .icon(app.default_window_icon().expect("bundled icon").clone())
                 .icon_as_template(true)
                 .tooltip("Intentio Tasks")
-                .on_tray_icon_event(|tray, _event| {
-                    // Clicking the tray brings the window back.
-                    if let Some(window) = tray.app_handle().get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.set_focus();
+                // The menu is what a left click opens; the icon itself no longer
+                // raises the window, because a menu that appears on the way to
+                // the window would be in the way rather than useful.
+                .on_menu_event(|app, event| {
+                    let Some(state) = app.try_state::<AppState>() else { return };
+                    match event.id().as_ref() {
+                        "tray-focus" => {
+                            // Whatever is at the top of Today is very likely what
+                            // the session is for; if Today is empty the session is
+                            // unattributed and will ask when it ends.
+                            let (task_id, task_title) = state
+                                .store
+                                .read()
+                                .ok()
+                                .map(|data| {
+                                    query::today(&data, &today_date())
+                                        .first()
+                                        .map(|entry| {
+                                            (Some(entry.task.id.clone()), Some(entry.task.title.clone()))
+                                        })
+                                        .unwrap_or((None, None))
+                                })
+                                .unwrap_or((None, None));
+                            timer::start(
+                                app,
+                                state.timer.clone(),
+                                state.tray(),
+                                state.store.clone(),
+                                task_id,
+                                task_title,
+                                None,
+                                SessionKind::Focus,
+                            );
+                        }
+                        "tray-break" => {
+                            timer::start(
+                                app,
+                                state.timer.clone(),
+                                state.tray(),
+                                state.store.clone(),
+                                None,
+                                None,
+                                None,
+                                SessionKind::Break,
+                            );
+                        }
+                        "tray-pause" => {
+                            timer::pause(app, state.timer.clone(), state.tray());
+                        }
+                        "tray-resume" => {
+                            timer::resume(app, state.timer.clone(), state.tray());
+                        }
+                        "tray-stop" => {
+                            timer::stop(app, state.timer.clone(), state.tray(), state.store.clone(), true);
+                        }
+                        "tray-show" => timer::focus_window(app),
+                        _ => {}
                     }
                 })
                 .build(app)?;
 
             if let Some(state) = app.try_state::<AppState>() {
+                timer::init_tray(handle, &state.timer, &Some(tray.clone()));
                 if let Ok(mut slot) = state.tray.lock() {
                     *slot = Some(tray);
                 }
@@ -401,6 +464,8 @@ pub fn run() {
             find_tasks,
             start_timer,
             stop_timer,
+            pause_timer,
+            resume_timer,
             timer_state,
             sessions,
             assign_session,

@@ -16,12 +16,13 @@ import { Button } from "primeng/button";
 import { Toast } from "primeng/toast";
 
 import { AboutDialogComponent } from "./components/about-dialog.component";
+import { AssignSessionComponent } from "./components/assign-session.component";
 import { LabelEdit, LabelKind, LabelsDialogComponent } from "./components/labels-dialog.component";
 import { MatrixViewComponent } from "./components/matrix-view.component";
 import { TaskDetailComponent } from "./components/task-detail.component";
 import { TaskAction, TaskMenuComponent } from "./components/task-menu.component";
 import { TaskRowComponent } from "./components/task-row.component";
-import { List, Plotted, Task } from "./models/task.models";
+import { List, Plotted, Session, Task } from "./models/task.models";
 import { TasksService } from "./services/tasks.service";
 import { ThemeService } from "./services/theme.service";
 import { UpdaterService } from "./services/updater.service";
@@ -38,6 +39,7 @@ type View = "today" | "board" | "matrix";
     Toast,
     Button,
     AboutDialogComponent,
+    AssignSessionComponent,
     LabelsDialogComponent,
     MatrixViewComponent,
     TaskDetailComponent,
@@ -55,6 +57,8 @@ export class AppComponent implements OnInit, OnDestroy {
   readonly view = signal<View>("today");
   readonly aboutOpen = signal(false);
   readonly labelsOpen = signal(false);
+  /** A finished focus session that landed against no task. */
+  readonly unassignedSession = signal<Session | null>(null);
   /** The task the context menu is open on, and where it was opened. */
   readonly taskMenu = signal<{ task: Task; x: number; y: number } | null>(null);
   readonly appVersion = signal("0.1.0");
@@ -122,6 +126,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   private menuUnlisten: UnlistenFn | null = null;
   private finishedUnlisten: UnlistenFn | null = null;
+  private unassignedUnlisten: UnlistenFn | null = null;
 
   /** Remaining time as `24:31`, for the in-app timer bar. */
   readonly clock = computed(() => {
@@ -151,6 +156,13 @@ export class AppComponent implements OnInit, OnDestroy {
       void this.tasks.load();
     }).catch(() => null as unknown as UnlistenFn);
 
+    // Rust raises the window before emitting this, so the question arrives on
+    // screen rather than behind whatever the user moved on to.
+    this.unassignedUnlisten = await listen<Session>("session-unassigned", (event) => {
+      void this.tasks.load();
+      this.unassignedSession.set(event.payload);
+    }).catch(() => null as unknown as UnlistenFn);
+
     // Delay so the shell has rendered before a toast can appear.
     setTimeout(() => void this.updater.checkForUpdates(), 3000);
   }
@@ -159,6 +171,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.tasks.stopWatching();
     this.menuUnlisten?.();
     this.finishedUnlisten?.();
+    this.unassignedUnlisten?.();
   }
 
   private async loadVersion(): Promise<void> {
@@ -560,6 +573,31 @@ export class AppComponent implements OnInit, OnDestroy {
         }
         await this.remove(task);
         break;
+    }
+  }
+
+  async assignUnassigned(taskId: string): Promise<void> {
+    const session = this.unassignedSession();
+    this.unassignedSession.set(null);
+    if (session) {
+      await this.tasks.assignSession(session.id, taskId);
+    }
+  }
+
+  /** Leave it as unattributed time, which is a real answer rather than a dodge. */
+  dismissUnassigned(): void {
+    this.unassignedSession.set(null);
+  }
+
+  async toggleTimerPause(): Promise<void> {
+    const timer = this.tasks.timer();
+    if (!timer?.running) {
+      return;
+    }
+    if (timer.paused) {
+      await this.tasks.resumeTimer();
+    } else {
+      await this.tasks.pauseTimer();
     }
   }
 

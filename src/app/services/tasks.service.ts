@@ -2,7 +2,7 @@ import { Injectable, computed, signal } from "@angular/core";
 import { invoke } from "@tauri-apps/api/core";
 import { UnlistenFn, listen } from "@tauri-apps/api/event";
 
-import { Board, LabelUse, List, Plotted, Settings, Snapshot, Stats, Task, TimerState, TodayEntry } from "../models/task.models";
+import { Board, LabelUse, List, Plotted, Session, Settings, Snapshot, Stats, Task, TimerState, TodayEntry } from "../models/task.models";
 
 /**
  * The app's single source of truth.
@@ -194,6 +194,20 @@ export class TasksService {
 
   async stopTimer(): Promise<void> {
     await this.guard(() => invoke<TimerState>("stop_timer"));
+  }
+
+  async pauseTimer(): Promise<void> {
+    // No reload: pausing changes the timer, not the store.
+    this.timer.set(await invoke<TimerState>("pause_timer"));
+  }
+
+  async resumeTimer(): Promise<void> {
+    this.timer.set(await invoke<TimerState>("resume_timer"));
+  }
+
+  /** Attribute a recorded session to a task, or to nothing when null. */
+  async assignSession(sessionId: string, taskId: string | null): Promise<void> {
+    await this.guard(() => invoke<Session>("assign_session", { sessionId, taskId }));
   }
 
   /**

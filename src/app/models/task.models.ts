@@ -90,8 +90,21 @@ export interface TodayEntry extends Task {
   reason: TodayReason;
 }
 
+/** A recorded stretch of work. */
+export interface Session {
+  id: string;
+  taskId?: string;
+  startedAt: number;
+  endedAt: number;
+  seconds: number;
+  kind: SessionKind;
+  completed: boolean;
+}
+
 export interface TimerState {
   running: boolean;
+  /** Running but held; keeps its task and the time already worked. */
+  paused: boolean;
   taskId?: string;
   taskTitle?: string;
   kind: SessionKind;

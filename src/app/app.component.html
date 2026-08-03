@@ -120,6 +120,7 @@
         <i class="pi" [ngClass]="timer.kind === 'break' ? 'pi-pause-circle' : 'pi-play-circle'"></i>
         <span class="clock">{{ clock() }}</span>
         <span class="on-task">{{ timer.taskTitle || (timer.kind === 'break' ? 'Break' : 'Focus') }}</span>
+        <button type="button" (click)="toggleTimerPause()">{{ timer.paused ? 'Resume' : 'Pause' }}</button>
         <button type="button" (click)="stopTimer()">Stop</button>
       </div>
     }
@@ -261,6 +262,15 @@
     (deleted)="deleteEditing()"
     (closed)="editing.set(null)"
   ></app-task-detail>
+}
+
+@if (unassignedSession(); as session) {
+  <app-assign-session
+    [session]="session"
+    [tasks]="tasks.tasks()"
+    (assigned)="assignUnassigned($event)"
+    (skipped)="dismissUnassigned()"
+  ></app-assign-session>
 }
 
 @if (taskMenu(); as menu) {
