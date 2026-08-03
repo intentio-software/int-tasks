@@ -482,6 +482,32 @@ button.ghost:hover {
   padding: 0 1rem;
 }
 
+/* The matrix is a picture: it has to be taken in at once, so it is sized to
+   the window rather than scrolled past. */
+.content.matrix-view {
+  overflow: hidden;
+  padding-bottom: 1rem;
+}
+
+.content.matrix-view .matrix {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.content.matrix-view app-matrix-view {
+  display: block;
+  flex: 1;
+  min-height: 0;
+}
+
+.flow {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
 .section-head .ghost.small + .ghost.small {
   margin-left: 0.4rem;
 }

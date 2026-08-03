@@ -2,7 +2,7 @@ import { Injectable, computed, signal } from "@angular/core";
 import { invoke } from "@tauri-apps/api/core";
 import { UnlistenFn, listen } from "@tauri-apps/api/event";
 
-import { Board, LabelUse, List, Plotted, Session, Settings, Snapshot, Stats, Task, TimerState, TodayEntry } from "../models/task.models";
+import { Board, LabelUse, List, Plotted, Session, Settings, Snapshot, Stats, Task, TimeSummary, TimerState, TodayEntry } from "../models/task.models";
 
 /**
  * The app's single source of truth.
@@ -30,6 +30,7 @@ export class TasksService {
 
   /** Total focus time recorded today, in seconds. */
   readonly focusSecondsToday = signal(0);
+  readonly summary = signal<TimeSummary | null>(null);
 
   private unlistenTimer: UnlistenFn | null = null;
 
@@ -74,6 +75,7 @@ export class TasksService {
     this.settings.set(snapshot.settings);
     this.date.set(snapshot.date);
     this.focusSecondsToday.set(snapshot.summary.total_seconds);
+    this.summary.set(snapshot.summary);
 
     // Keep the selected board if it still exists, otherwise fall back.
     const current = this.activeBoard();

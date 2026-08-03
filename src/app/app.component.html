@@ -41,6 +41,7 @@
       <div class="views" role="group" aria-label="View">
         <button type="button" [class.on]="view() === 'today'" (click)="view.set('today')">Today</button>
         <button type="button" [class.on]="view() === 'board'" (click)="view.set('board')">Board</button>
+        <button type="button" [class.on]="view() === 'matrix'" (click)="view.set('matrix')">Matrix</button>
         <button type="button" [class.on]="view() === 'flow'" (click)="view.set('flow')">Flow</button>
       </div>
     </div>
@@ -126,7 +127,7 @@
     }
   }
 
-  <main class="content" [class.board-view]="view() === 'board'">
+  <main class="content" [class.board-view]="view() === 'board'" [class.matrix-view]="view() === 'matrix'">
     @if (view() === 'today') {
       <section class="today">
         <div class="section-head">
@@ -158,7 +159,7 @@
           </div>
         }
       </section>
-    } @else if (view() === 'flow') {
+    } @else if (view() === 'matrix') {
       <section class="matrix">
         <div class="section-head">
           <h2>Impact vs effort</h2>
@@ -187,8 +188,16 @@
           (picked)="open($event)"
           (menuRequested)="openTaskMenu($event.task, $event.event)"
         ></app-matrix-view>
+      </section>
+    } @else if (view() === 'flow') {
+      <section class="flow">
+        <div class="section-head">
+          <h2>Flow</h2>
+          <span class="date">{{ tasks.date() }}</span>
+        </div>
 
-        <!-- What to do next, and what actually got done, read together. -->
+        <app-flow-stats [stats]="tasks.stats()" [summary]="tasks.summary()"></app-flow-stats>
+
         <app-session-log
           [sessions]="tasks.sessions()"
           [tasks]="tasks.tasks()"

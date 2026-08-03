@@ -21,6 +21,7 @@ import { LabelEdit, LabelKind, LabelsDialogComponent } from "./components/labels
 import { MatrixViewComponent } from "./components/matrix-view.component";
 import { TaskDetailComponent } from "./components/task-detail.component";
 import { TaskAction, TaskMenuComponent } from "./components/task-menu.component";
+import { FlowStatsComponent } from "./components/flow-stats.component";
 import { SessionLogComponent } from "./components/session-log.component";
 import { TaskRowComponent } from "./components/task-row.component";
 import { List, Plotted, Session, Task } from "./models/task.models";
@@ -28,7 +29,7 @@ import { TasksService } from "./services/tasks.service";
 import { ThemeService } from "./services/theme.service";
 import { UpdaterService } from "./services/updater.service";
 
-type View = "today" | "board" | "flow";
+type View = "today" | "board" | "matrix" | "flow";
 
 @Component({
   selector: "app-root",
@@ -44,6 +45,7 @@ type View = "today" | "board" | "flow";
     LabelsDialogComponent,
     MatrixViewComponent,
     TaskDetailComponent,
+    FlowStatsComponent,
     SessionLogComponent,
     TaskMenuComponent,
     TaskRowComponent
@@ -445,6 +447,9 @@ export class AppComponent implements OnInit, OnDestroy {
         break;
       case "view-board":
         this.view.set("board");
+        break;
+      case "view-matrix":
+        this.view.set("matrix");
         break;
       case "view-flow":
         this.view.set("flow");

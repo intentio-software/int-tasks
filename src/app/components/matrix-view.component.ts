@@ -69,13 +69,26 @@ import { Plotted } from "../models/task.models";
     `
       .wrap {
         position: relative;
-        max-width: 34rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 0;
+        height: 100%;
+        /* No width cap of its own — the square grows until whichever of width
+           or height runs out first, so a tall window is not left half empty. */
+        max-width: 100%;
         margin: 0 auto;
         padding: 0 1rem;
       }
+      /* The largest square that fits. Letting the svg flex to fill the column
+         instead would letterbox it, stranding the axis label a long way from
+         the plot it labels. */
       .plot {
         width: 100%;
-        height: auto;
+        max-width: 100%;
+        max-height: 100%;
+        aspect-ratio: 1;
         overflow: visible;
       }
       .q {
@@ -134,6 +147,7 @@ import { Plotted } from "../models/task.models";
       .axis-labels {
         display: flex;
         justify-content: space-between;
+        width: 100%;
         margin-top: 0.3rem;
         font-size: 0.7rem;
         color: var(--ink-faint);
