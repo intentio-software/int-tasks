@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/intentio-software/int-tasks/compare/v1.7.0...v1.8.0) (2026-08-03)
+
+
+### Features
+
+* count working days for streaks and for ageing out finished work ([9c93403](https://github.com/intentio-software/int-tasks/commit/9c9340357774484ffcda5c6986a6a2fa88f44524))
+
 # [1.7.0](https://github.com/intentio-software/int-tasks/compare/v1.6.0...v1.7.0) (2026-08-03)
 
 
