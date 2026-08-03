@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/intentio-software/int-tasks/compare/v1.5.1...v1.6.0) (2026-08-03)
+
+
+### Features
+
+* combine the matrix and recorded time into a Flow view ([426fcdc](https://github.com/intentio-software/int-tasks/commit/426fcdca97ade4c2c8c947fa4a7b8da3cd1c95e4))
+
 ## [1.5.1](https://github.com/intentio-software/int-tasks/compare/v1.5.0...v1.5.1) (2026-08-03)
 
 
