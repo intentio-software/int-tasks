@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/intentio-software/int-tasks/compare/v1.6.0...v1.7.0) (2026-08-03)
+
+
+### Features
+
+* separate Matrix from Flow, and show the standing on Flow ([2b02c58](https://github.com/intentio-software/int-tasks/commit/2b02c585b1ad37512125cd593fab6f6c2bf2509f))
+
 # [1.6.0](https://github.com/intentio-software/int-tasks/compare/v1.5.1...v1.6.0) (2026-08-03)
 
 
