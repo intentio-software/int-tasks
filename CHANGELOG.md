@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/intentio-software/int-tasks/compare/v1.8.0...v1.9.0) (2026-08-03)
+
+
+### Features
+
+* show focus and impact over the last ten working days ([0ae9799](https://github.com/intentio-software/int-tasks/commit/0ae9799803e650da8693d66ef0dacfc708c473b8))
+
 # [1.8.0](https://github.com/intentio-software/int-tasks/compare/v1.7.0...v1.8.0) (2026-08-03)
 
 
