@@ -371,8 +371,14 @@ pub fn run() {
 
             // The tray is where the countdown lives, so the timer is visible
             // with the window closed.
+            // A template image carries coverage, not colour: macOS tints it to
+            // suit a light or dark menu bar. Handing it the full app icon made
+            // every coloured pixel opaque, which is why it showed as a block.
+            // scripts/make-tray-icon.py regenerates this glyph.
+            let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/tray.png"))
+                .expect("tray icon");
             let tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().expect("bundled icon").clone())
+                .icon(tray_icon)
                 .icon_as_template(true)
                 .tooltip("Intentio Tasks")
                 // The menu is what a left click opens; the icon itself no longer
