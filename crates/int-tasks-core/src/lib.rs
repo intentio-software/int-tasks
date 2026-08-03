@@ -35,6 +35,6 @@ pub use capture::{parse as parse_capture, Captured};
 pub use error::{Result, TaskError};
 pub use model::{Board, List, Session, SessionKind, Status, Task, new_id, now_millis};
 pub use matrix::{Plotted, Quadrant};
-pub use stats::Stats;
+pub use stats::{DayProgress, Stats};
 pub use query::{Filter, LabelUse, TaskTime, TimeSummary, TodayEntry, TodayReason};
 pub use store::{Data, Settings, Store};

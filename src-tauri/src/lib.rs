@@ -14,7 +14,7 @@ use tauri::{AppHandle, Manager, State};
 
 use int_tasks_core::{
     Data, Filter, LabelUse, Plotted, Session, SessionKind, Stats, Store, Task, TimeSummary,
-    TodayEntry, matrix, query, stats,
+    DayProgress, TodayEntry, matrix, query, stats,
 };
 use timer::{Timer, TimerState};
 
@@ -45,6 +45,7 @@ pub struct Snapshot {
     /// Open, scored tasks placed on the impact/effort matrix.
     pub matrix: Vec<Plotted>,
     pub stats: Stats,
+    pub progress: Vec<DayProgress>,
     pub projects: Vec<LabelUse>,
     pub tags: Vec<LabelUse>,
     pub settings: int_tasks_core::Settings,
@@ -83,6 +84,8 @@ fn snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
     let snapshot_stats =
         stats::stats(&data, &sessions, &date, utc_offset_seconds(), data.settings.daily_focus_goal);
     let summary = query::time_summary(&data, &sessions, None, None);
+    // Ten working days: enough to see a direction, short enough to read at a glance.
+    let progress = stats::recent_progress(&data, &sessions, &date, utc_offset_seconds(), 10);
 
     let mut data = data;
     data.tasks
@@ -92,6 +95,7 @@ fn snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
         today: snapshot_today,
         matrix: snapshot_matrix,
         stats: snapshot_stats,
+        progress,
         summary,
         projects,
         tags,

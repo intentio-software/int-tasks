@@ -122,6 +122,13 @@ export interface TimerState {
   remainingSeconds: number;
 }
 
+/** One working day on the Flow trend. */
+export interface DayProgress {
+  date: string;
+  focusMinutes: number;
+  points: number;
+}
+
 export interface TaskTime {
   task_id: string;
   title?: string;
@@ -144,6 +151,7 @@ export interface Snapshot {
   summary: TimeSummary;
   matrix: Plotted[];
   stats: Stats;
+  progress: DayProgress[];
   projects: LabelUse[];
   tags: LabelUse[];
   settings: Settings;

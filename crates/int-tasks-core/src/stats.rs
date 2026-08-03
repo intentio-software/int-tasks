@@ -8,7 +8,7 @@
 //! shout at you, and a streak that punishes a day off stops being motivating
 //! very quickly.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -37,6 +37,67 @@ pub struct Stats {
     pub completed_today: u32,
     /// True once today's goal is met, so the UI can mark it without recomputing.
     pub goal_met: bool,
+}
+
+/// One working day's worth of progress, for the trend on Flow.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DayProgress {
+    pub date: String,
+    pub focus_minutes: u64,
+    /// Impact of everything finished that day.
+    pub points: u32,
+}
+
+/// The last `days` working days, oldest first.
+///
+/// Working days only, so the bars are evenly spaced and comparable — a trend
+/// with a two-day gap in the middle of it invites the wrong reading. Work done
+/// on a weekend still counts towards the streak and appears in the session log;
+/// it just does not get a column here.
+pub fn recent_progress(
+    data: &Data,
+    sessions: &[Session],
+    today: &str,
+    utc_offset_seconds: i32,
+    days: usize,
+) -> Vec<DayProgress> {
+    let mut focus_by_day: HashMap<String, u64> = HashMap::new();
+    for session in sessions.iter().filter(|s| s.kind == SessionKind::Focus) {
+        *focus_by_day.entry(local_date(session.started_at, utc_offset_seconds)).or_insert(0) +=
+            session.seconds;
+    }
+
+    let mut points_by_day: HashMap<String, u32> = HashMap::new();
+    for task in data.tasks.iter().filter(|task| task.status.is_done()) {
+        if let Some(at) = task.completed_at {
+            *points_by_day.entry(local_date(at, utc_offset_seconds)).or_insert(0) +=
+                task.impact.map(u32::from).unwrap_or(UNSCORED_IMPACT);
+        }
+    }
+
+    let mut out = Vec::with_capacity(days);
+    let mut cursor = today.to_string();
+    // Bounded: ten working days can never be more than a few weeks back, and a
+    // malformed date must not spin.
+    for _ in 0..400 {
+        if out.len() >= days {
+            break;
+        }
+        if data.settings.is_working_day(&cursor) {
+            out.push(DayProgress {
+                focus_minutes: focus_by_day.get(&cursor).copied().unwrap_or(0) / 60,
+                points: points_by_day.get(&cursor).copied().unwrap_or(0),
+                date: cursor.clone(),
+            });
+        }
+        match days_before(&cursor, 1) {
+            Some(previous) => cursor = previous,
+            None => break,
+        }
+    }
+    out.reverse();
+    out
 }
 
 /// Work out the day's standing.
@@ -183,6 +244,34 @@ mod tests {
 
     fn data_with_settings(settings: crate::store::Settings) -> Data {
         Data { boards: vec![Board::with_default_lists("Tasks", 0)], tasks: vec![], revision: 1, settings }
+    }
+
+    #[test]
+    fn the_trend_covers_working_days_only() {
+        let sessions = vec![focus_on(MONDAY), focus_on("2026-08-01"), focus_on("2026-07-31")];
+        let progress = recent_progress(&data_with_settings(Default::default()), &sessions, MONDAY, 0, 5);
+
+        assert_eq!(progress.len(), 5);
+        let dates: Vec<&str> = progress.iter().map(|day| day.date.as_str()).collect();
+        assert_eq!(dates, vec!["2026-07-28", "2026-07-29", "2026-07-30", "2026-07-31", MONDAY]);
+        assert!(!dates.contains(&"2026-08-01"), "Saturday gets no column");
+
+        assert_eq!(progress.last().unwrap().focus_minutes, 25, "Monday's session");
+        assert_eq!(progress[3].focus_minutes, 25, "Friday's session");
+        assert_eq!(progress[0].focus_minutes, 0, "a day with no work is still a column");
+    }
+
+    #[test]
+    fn the_trend_counts_impact_on_the_day_it_was_finished() {
+        let data = Data {
+            boards: vec![Board::with_default_lists("Tasks", 0)],
+            tasks: vec![done("Big", Some(8), MONDAY), done("Earlier", Some(5), "2026-07-31")],
+            revision: 1,
+            settings: Default::default(),
+        };
+        let progress = recent_progress(&data, &[], MONDAY, 0, 3);
+        assert_eq!(progress.last().unwrap().points, 8);
+        assert_eq!(progress[progress.len() - 2].points, 5);
     }
 
     #[test]

@@ -22,6 +22,7 @@ import { MatrixViewComponent } from "./components/matrix-view.component";
 import { TaskDetailComponent } from "./components/task-detail.component";
 import { TaskAction, TaskMenuComponent } from "./components/task-menu.component";
 import { FlowStatsComponent } from "./components/flow-stats.component";
+import { ProgressTrendComponent } from "./components/progress-trend.component";
 import { SessionLogComponent } from "./components/session-log.component";
 import { WorkingRhythmComponent } from "./components/working-rhythm.component";
 import { TaskRowComponent } from "./components/task-row.component";
@@ -47,6 +48,7 @@ type View = "today" | "board" | "matrix" | "flow";
     MatrixViewComponent,
     TaskDetailComponent,
     FlowStatsComponent,
+    ProgressTrendComponent,
     SessionLogComponent,
     TaskMenuComponent,
     TaskRowComponent,

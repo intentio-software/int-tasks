@@ -198,6 +198,8 @@
 
         <app-flow-stats [stats]="tasks.stats()" [summary]="tasks.summary()"></app-flow-stats>
 
+        <app-progress-trend [progress]="tasks.progress()"></app-progress-trend>
+
         <app-session-log
           [sessions]="tasks.sessions()"
           [tasks]="tasks.tasks()"
