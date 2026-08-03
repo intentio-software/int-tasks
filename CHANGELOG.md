@@ -1,3 +1,10 @@
+## [1.5.1](https://github.com/intentio-software/int-tasks/compare/v1.5.0...v1.5.1) (2026-08-03)
+
+
+### Bug Fixes
+
+* give the menu bar a template icon of its own ([eedcca1](https://github.com/intentio-software/int-tasks/commit/eedcca10b87ce514e2c00bf83e61ef020d8a327e))
+
 # [1.5.0](https://github.com/intentio-software/int-tasks/compare/v1.4.0...v1.5.0) (2026-08-03)
 
 
