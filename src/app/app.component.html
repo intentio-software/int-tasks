@@ -204,6 +204,13 @@
           (assigned)="reassignSession($event)"
           (removed)="removeSession($event)"
         ></app-session-log>
+
+        <app-working-rhythm
+          [settings]="tasks.settings()"
+          (workingDaysChanged)="tasks.setWorkingDays($event)"
+          (holidaysChanged)="tasks.setHolidays($event)"
+          (hideAfterChanged)="tasks.setHideCompletedAfterDays($event)"
+        ></app-working-rhythm>
       </section>
     } @else {
       <section class="board">

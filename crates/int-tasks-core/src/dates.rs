@@ -55,6 +55,14 @@ pub fn local_date(millis: u64, utc_offset_seconds: i32) -> String {
 }
 
 /// The date `n` days before the given one.
+/// Day of the week, 0 = Sunday.
+///
+/// The civil-day count is anchored at 1970-01-01, which was a Thursday.
+pub fn weekday(date: &str) -> Option<u8> {
+    let days = civil_days(date)?;
+    Some((days + 4).rem_euclid(7) as u8)
+}
+
 pub fn days_before(date: &str, n: i64) -> Option<String> {
     civil_days(date).map(|days| civil_date(days - n))
 }

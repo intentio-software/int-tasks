@@ -36,6 +36,38 @@ pub struct Settings {
     /// week later and exactly what you do not want an hour later.
     #[serde(default = "default_hide_completed_after_days")]
     pub hide_completed_after_days: u32,
+    /// Days of the week that count as working days, 0 = Sunday.
+    ///
+    /// Streaks and the ageing-out of completed work are measured in these, not
+    /// in calendar days: taking Saturday off is not a lapse, and a task finished
+    /// on Friday should still be on screen on Monday morning.
+    #[serde(default = "default_working_days")]
+    pub working_days: Vec<u8>,
+    /// Individual dates that are not working days, `YYYY-MM-DD`.
+    ///
+    /// Kept as a plain list the user maintains rather than a shipped calendar:
+    /// public holidays vary by country, province and employer, and a wrong
+    /// holiday is worse than none.
+    #[serde(default)]
+    pub holidays: Vec<String>,
+}
+
+fn default_working_days() -> Vec<u8> {
+    vec![1, 2, 3, 4, 5]
+}
+
+impl Settings {
+    /// Whether work would ordinarily be expected on this date.
+    pub fn is_working_day(&self, date: &str) -> bool {
+        if self.holidays.iter().any(|holiday| holiday.trim() == date) {
+            return false;
+        }
+        match crate::dates::weekday(date) {
+            Some(day) => self.working_days.contains(&day),
+            // An unparseable date is not a reason to treat it as a day off.
+            None => true,
+        }
+    }
 }
 
 fn default_hide_completed_after_days() -> u32 {
@@ -46,7 +78,12 @@ impl Default for Settings {
     fn default() -> Self {
         // Four twenty-five minute sessions is a realistic day of deep work, not
         // an aspirational one — a goal that is never met stops meaning anything.
-        Settings { daily_focus_goal: 4, hide_completed_after_days: default_hide_completed_after_days() }
+        Settings {
+            daily_focus_goal: 4,
+            hide_completed_after_days: default_hide_completed_after_days(),
+            working_days: default_working_days(),
+            holidays: Vec::new(),
+        }
     }
 }
 
@@ -491,6 +528,33 @@ impl Store {
 
     /// Change the daily focus goal. Zero would make the goal meaningless, so
     /// it is clamped to something achievable.
+    /// Replace the working week. Values outside 0-6 are dropped rather than
+    /// rejected: a bad day number is a caller bug, not a reason to lose the rest.
+    pub fn set_working_days(&self, days: Vec<u8>) -> Result<Settings> {
+        let mut days: Vec<u8> = days.into_iter().filter(|day| *day <= 6).collect();
+        days.sort_unstable();
+        days.dedup();
+        self.update(|data| {
+            data.settings.working_days = days.clone();
+            Ok(data.settings.clone())
+        })
+    }
+
+    /// Replace the list of non-working dates.
+    pub fn set_holidays(&self, holidays: Vec<String>) -> Result<Settings> {
+        let mut holidays: Vec<String> = holidays
+            .into_iter()
+            .map(|date| date.trim().to_string())
+            .filter(|date| crate::dates::civil_days(date).is_some())
+            .collect();
+        holidays.sort();
+        holidays.dedup();
+        self.update(|data| {
+            data.settings.holidays = holidays.clone();
+            Ok(data.settings.clone())
+        })
+    }
+
     pub fn set_daily_goal(&self, sessions: u32) -> Result<Settings> {
         self.update(|data| {
             data.settings.daily_focus_goal = sessions.clamp(1, 16);

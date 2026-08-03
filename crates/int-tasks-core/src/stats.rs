@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::dates::{days_before, local_date};
 use crate::model::{Session, SessionKind};
-use crate::store::Data;
+use crate::store::{Data, Settings};
 
 /// Impact assumed for a task nobody scored, so completing unscored work still
 /// counts for something without pretending it was a triumph.
@@ -80,7 +80,7 @@ pub fn stats(
     let sessions_today = today_sessions.len() as u32;
 
     Stats {
-        streak_days: streak(&active_days, today),
+        streak_days: streak(&active_days, today, &data.settings),
         sessions_today,
         daily_goal,
         focus_minutes_today: today_sessions.iter().map(|session| session.seconds).sum::<u64>() / 60,
@@ -91,25 +91,22 @@ pub fn stats(
     }
 }
 
-/// Length of the run of active days ending at today or yesterday.
+/// Length of the run of working days worked, ending at or before today.
 ///
-/// Yesterday counts as the end of the run so that a streak is not reported as
-/// broken at breakfast, before there has been any chance to work.
-fn streak(active_days: &HashSet<String>, today: &str) -> u32 {
-    let start = if active_days.contains(today) {
-        today.to_string()
-    } else {
-        match days_before(today, 1) {
-            Some(yesterday) if active_days.contains(&yesterday) => yesterday,
-            // Neither today nor yesterday: the run is over.
-            _ => return 0,
-        }
-    };
-
+/// Three rules, in order. Today never breaks a streak, because it is reported
+/// at breakfast before there has been any chance to work. A day that is not a
+/// working day never breaks one either — a weekend off is rest, not a lapse —
+/// though working through one still counts. Anything else missed ends the run.
+fn streak(active_days: &HashSet<String>, today: &str, settings: &Settings) -> u32 {
     let mut count = 0u32;
-    let mut cursor = start;
-    while active_days.contains(&cursor) {
-        count += 1;
+    let mut cursor = today.to_string();
+    // Bounded so a malformed date cannot spin: far longer than any real streak.
+    for _ in 0..3_650 {
+        if active_days.contains(&cursor) {
+            count += 1;
+        } else if cursor != today && settings.is_working_day(&cursor) {
+            break;
+        }
         match days_before(&cursor, 1) {
             Some(previous) => cursor = previous,
             None => break,
@@ -179,6 +176,61 @@ mod tests {
     fn two_days_off_does_end_it() {
         let sessions = vec![focus_on("2026-07-29"), focus_on("2026-07-28")];
         assert_eq!(stats(&data_with(vec![]), &sessions, TODAY, 0, 4).streak_days, 0);
+    }
+
+    /// 2026-08-03 is a Monday; 08-01 and 08-02 are the weekend before it.
+    const MONDAY: &str = "2026-08-03";
+
+    fn data_with_settings(settings: crate::store::Settings) -> Data {
+        Data { boards: vec![Board::with_default_lists("Tasks", 0)], tasks: vec![], revision: 1, settings }
+    }
+
+    #[test]
+    fn a_weekend_off_does_not_break_the_streak() {
+        // Worked Friday, rested, worked Monday. That is a two day streak, not a
+        // broken one — which is the whole point of counting working days.
+        let sessions = vec![focus_on(MONDAY), focus_on("2026-07-31")];
+        let stats = stats(&data_with_settings(Default::default()), &sessions, MONDAY, 0, 4);
+        assert_eq!(stats.streak_days, 2);
+    }
+
+    #[test]
+    fn working_through_a_weekend_still_counts() {
+        let sessions = vec![
+            focus_on(MONDAY),
+            focus_on("2026-08-02"),
+            focus_on("2026-08-01"),
+            focus_on("2026-07-31"),
+        ];
+        let stats = stats(&data_with_settings(Default::default()), &sessions, MONDAY, 0, 4);
+        assert_eq!(stats.streak_days, 4, "a day off is not required, only forgiven");
+    }
+
+    #[test]
+    fn a_holiday_is_treated_like_a_weekend() {
+        let mut settings = crate::store::Settings::default();
+        settings.holidays = vec!["2026-07-31".to_string()];
+        // Nothing on the Friday, because it was a holiday.
+        let sessions = vec![focus_on(MONDAY), focus_on("2026-07-30")];
+        let stats = stats(&data_with_settings(settings), &sessions, MONDAY, 0, 4);
+        assert_eq!(stats.streak_days, 2);
+    }
+
+    #[test]
+    fn a_missed_working_day_still_ends_it() {
+        // The Friday was an ordinary working day and nothing was done on it.
+        let sessions = vec![focus_on(MONDAY), focus_on("2026-07-30")];
+        let stats = stats(&data_with_settings(Default::default()), &sessions, MONDAY, 0, 4);
+        assert_eq!(stats.streak_days, 1);
+    }
+
+    #[test]
+    fn a_seven_day_working_week_forgives_nothing() {
+        let mut settings = crate::store::Settings::default();
+        settings.working_days = vec![0, 1, 2, 3, 4, 5, 6];
+        let sessions = vec![focus_on(MONDAY), focus_on("2026-07-31")];
+        let stats = stats(&data_with_settings(settings), &sessions, MONDAY, 0, 4);
+        assert_eq!(stats.streak_days, 1, "the weekend now counts against it");
     }
 
     #[test]

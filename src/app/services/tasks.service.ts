@@ -169,6 +169,14 @@ export class TasksService {
     await this.guard(() => invoke<number>("delete_tag", { name }));
   }
 
+  async setWorkingDays(days: number[]): Promise<void> {
+    await this.guard(() => invoke("set_working_days", { days }));
+  }
+
+  async setHolidays(holidays: string[]): Promise<void> {
+    await this.guard(() => invoke("set_holidays", { holidays }));
+  }
+
   async setHideCompletedAfterDays(days: number): Promise<void> {
     await this.guard(() => invoke("set_hide_completed_after_days", { days }));
   }

@@ -46,6 +46,10 @@ export interface Board {
 export interface Settings {
   dailyFocusGoal: number;
   hideCompletedAfterDays: number;
+  /** Days of the week that count as working days, 0 = Sunday. */
+  workingDays: number[];
+  /** Individual non-working dates, `YYYY-MM-DD`. */
+  holidays: string[];
 }
 
 /** A project or tag, with how much work carries it. */

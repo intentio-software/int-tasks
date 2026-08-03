@@ -14,7 +14,7 @@ use tauri::{AppHandle, Manager, State};
 
 use int_tasks_core::{
     Data, Filter, LabelUse, Plotted, Session, SessionKind, Stats, Store, Task, TimeSummary,
-    TodayEntry, matrix, model, query, stats,
+    TodayEntry, matrix, query, stats,
 };
 use timer::{Timer, TimerState};
 
@@ -77,7 +77,6 @@ fn snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
     let projects = query::projects(&data);
     let tags = query::tags(&data);
     let settings = data.settings.clone();
-    let now = model::now_millis();
 
     let snapshot_today = query::today(&data, &date);
     let snapshot_matrix = matrix::plot(&data, &date);
@@ -87,7 +86,7 @@ fn snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
 
     let mut data = data;
     data.tasks
-        .retain(|task| !query::is_stale_completion(task, now, settings.hide_completed_after_days));
+        .retain(|task| !query::is_stale_completion(task, &date, utc_offset_seconds(), &settings));
 
     Ok(Snapshot {
         today: snapshot_today,
@@ -126,6 +125,16 @@ fn delete_tag(state: State<'_, AppState>, name: String) -> Result<usize, String>
 }
 
 /// How long a completed task stays visible.
+#[tauri::command]
+fn set_working_days(state: State<'_, AppState>, days: Vec<u8>) -> Result<(), String> {
+    state.store.set_working_days(days).map(|_| ()).map_err(fail)
+}
+
+#[tauri::command]
+fn set_holidays(state: State<'_, AppState>, holidays: Vec<String>) -> Result<(), String> {
+    state.store.set_holidays(holidays).map(|_| ()).map_err(fail)
+}
+
 #[tauri::command]
 fn set_hide_completed_after_days(
     state: State<'_, AppState>,
@@ -466,6 +475,8 @@ pub fn run() {
             suggest_task,
             set_daily_goal,
             set_hide_completed_after_days,
+            set_working_days,
+            set_holidays,
             rename_project,
             delete_project,
             rename_tag,

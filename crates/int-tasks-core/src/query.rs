@@ -191,16 +191,37 @@ fn into_sorted(counts: HashMap<String, (usize, usize)>) -> Vec<LabelUse> {
 ///
 /// Only ever hidden, never removed: statistics, streaks and points all still
 /// count it. Anything not completed is always visible.
-pub fn is_stale_completion(task: &Task, now_millis: u64, after_days: u32) -> bool {
+pub fn is_stale_completion(
+    task: &Task,
+    today: &str,
+    utc_offset_seconds: i32,
+    settings: &crate::store::Settings,
+) -> bool {
     if !task.status.is_done() {
         return false;
     }
     let Some(completed_at) = task.completed_at else {
-        // Completed but unstamped — older data. Keep it rather than vanish it.
         return false;
     };
-    let window = after_days as u64 * 24 * 60 * 60 * 1000;
-    now_millis.saturating_sub(completed_at) > window
+    let finished = crate::dates::local_date(completed_at, utc_offset_seconds);
+    // Working days strictly after the day it was finished, up to and including
+    // today. Counted rather than subtracted so a weekend or a holiday in
+    // between buys the task the time it should.
+    let mut elapsed = 0u32;
+    let mut cursor = today.to_string();
+    for _ in 0..3_650 {
+        if cursor <= finished {
+            break;
+        }
+        if settings.is_working_day(&cursor) {
+            elapsed += 1;
+        }
+        match crate::dates::days_before(&cursor, 1) {
+            Some(previous) => cursor = previous,
+            None => break,
+        }
+    }
+    elapsed > settings.hide_completed_after_days
 }
 
 /// Time recorded against tasks.
@@ -348,23 +369,61 @@ mod tests {
         assert_eq!(tags.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), vec!["admin", "bug"]);
     }
 
+    /// Midday UTC on a date, so a test offset cannot shift the day.
+    fn at(date: &str) -> u64 {
+        (crate::dates::civil_days(date).unwrap() as u64) * 86_400_000 + 12 * 3_600_000
+    }
+
+    fn weekdays() -> crate::store::Settings {
+        crate::store::Settings { hide_completed_after_days: 2, ..Default::default() }
+    }
+
     #[test]
     fn a_completed_task_hides_only_after_the_window() {
-        const DAY: u64 = 24 * 60 * 60 * 1000;
-        let now = 100 * DAY;
+        // 2026-08-03 to 2026-08-07 is a Monday to Friday.
         let mut done = task("Finished", None, false, Status::Done);
+        done.completed_at = Some(at("2026-08-04"));
 
-        done.completed_at = Some(now - DAY);
-        assert!(!is_stale_completion(&done, now, 2), "yesterday's work is still visible");
+        assert!(
+            !is_stale_completion(&done, "2026-08-05", 0, &weekdays()),
+            "yesterday's work is still visible"
+        );
+        assert!(
+            !is_stale_completion(&done, "2026-08-06", 0, &weekdays()),
+            "two working days on, still inside the window"
+        );
+        assert!(
+            is_stale_completion(&done, "2026-08-07", 0, &weekdays()),
+            "three working days on, it drops out"
+        );
+    }
 
-        done.completed_at = Some(now - 3 * DAY);
-        assert!(is_stale_completion(&done, now, 2), "three days on, it drops out");
+    #[test]
+    fn a_weekend_does_not_count_against_the_window() {
+        // Finished on Friday. Come Monday only one working day has passed, so
+        // it is still there — which is the point of counting working days.
+        let mut done = task("Friday finish", None, false, Status::Done);
+        done.completed_at = Some(at("2026-07-31"));
+        assert!(!is_stale_completion(&done, "2026-08-03", 0, &weekdays()), "Monday still shows it");
+        assert!(!is_stale_completion(&done, "2026-08-04", 0, &weekdays()));
+        assert!(is_stale_completion(&done, "2026-08-05", 0, &weekdays()), "Wednesday clears it");
+    }
+
+    #[test]
+    fn a_holiday_buys_the_same_grace_as_a_weekend() {
+        let mut settings = weekdays();
+        settings.holidays = vec!["2026-08-05".to_string()];
+        let mut done = task("Before the holiday", None, false, Status::Done);
+        done.completed_at = Some(at("2026-08-03"));
+        // Tue, [Wed holiday], Thu -> only two working days by Thursday.
+        assert!(!is_stale_completion(&done, "2026-08-06", 0, &settings));
+        assert!(is_stale_completion(&done, "2026-08-07", 0, &settings));
     }
 
     #[test]
     fn open_tasks_never_go_stale() {
         let open = task("Still going", None, false, Status::Todo);
-        assert!(!is_stale_completion(&open, u64::MAX, 0));
+        assert!(!is_stale_completion(&open, "2026-08-03", 0, &weekdays()));
     }
 
     #[test]
@@ -372,7 +431,7 @@ mod tests {
         // Older records may lack the stamp; vanishing them would look like loss.
         let mut done = task("Legacy", None, false, Status::Done);
         done.completed_at = None;
-        assert!(!is_stale_completion(&done, u64::MAX, 2));
+        assert!(!is_stale_completion(&done, "2026-08-03", 0, &weekdays()));
     }
 
     #[test]

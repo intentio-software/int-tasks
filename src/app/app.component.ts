@@ -23,6 +23,7 @@ import { TaskDetailComponent } from "./components/task-detail.component";
 import { TaskAction, TaskMenuComponent } from "./components/task-menu.component";
 import { FlowStatsComponent } from "./components/flow-stats.component";
 import { SessionLogComponent } from "./components/session-log.component";
+import { WorkingRhythmComponent } from "./components/working-rhythm.component";
 import { TaskRowComponent } from "./components/task-row.component";
 import { List, Plotted, Session, Task } from "./models/task.models";
 import { TasksService } from "./services/tasks.service";
@@ -48,7 +49,8 @@ type View = "today" | "board" | "matrix" | "flow";
     FlowStatsComponent,
     SessionLogComponent,
     TaskMenuComponent,
-    TaskRowComponent
+    TaskRowComponent,
+    WorkingRhythmComponent
   ],
   templateUrl: "./app.component.html",
   styleUrls: ["./app.component.css"]
