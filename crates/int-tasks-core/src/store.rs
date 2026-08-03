@@ -539,9 +539,31 @@ impl Store {
             .ok_or_else(|| TaskError::SessionNotFound(session_id.to_string()))?;
         session.task_id = task_id.map(str::to_string);
         let updated = session.clone();
+        self.rewrite_sessions(&sessions)?;
+        Ok(updated)
+    }
 
+    /// Remove a session from the log.
+    ///
+    /// Recorded time is a fact about the past and reassigning it is the usual
+    /// correction, but a timer left running over lunch is not a fact about
+    /// anything — leaving it in would quietly inflate every report it touches.
+    pub fn delete_session(&self, session_id: &str) -> Result<Session> {
+        let mut sessions = self.sessions()?;
+        let index = sessions
+            .iter()
+            .position(|session| session.id == session_id)
+            .ok_or_else(|| TaskError::SessionNotFound(session_id.to_string()))?;
+        let removed = sessions.remove(index);
+        self.rewrite_sessions(&sessions)?;
+        Ok(removed)
+    }
+
+    /// Replace the whole log atomically. Sessions are appended in the ordinary
+    /// case; only corrections rewrite, and a half-written log would lose work.
+    fn rewrite_sessions(&self, sessions: &[Session]) -> Result<()> {
         let mut text = String::new();
-        for session in &sessions {
+        for session in sessions {
             let line = serde_json::to_string(session).map_err(|err| TaskError::Corrupt(err.to_string()))?;
             text.push_str(&line);
             text.push('\n');
@@ -549,7 +571,7 @@ impl Store {
         let temp = self.root.join(format!(".{SESSIONS_FILE}.{}.tmp", std::process::id()));
         fs::write(&temp, text)?;
         fs::rename(&temp, self.sessions_path())?;
-        Ok(updated)
+        Ok(())
     }
 
     /// Build a session record for a stretch of work that just ended.
@@ -607,6 +629,28 @@ mod tests {
         assert_eq!(task.title, "call the bank");
         assert!(task.project.is_none());
         assert!(task.tags.is_empty());
+    }
+
+    #[test]
+    fn a_session_can_be_removed_without_disturbing_the_rest() {
+        let store = temp_store("delete-session");
+        let a = store.finish_session(None, 1_000, 1500, SessionKind::Focus, true).unwrap();
+        let b = store.finish_session(Some("task_1"), 2_000, 900, SessionKind::Focus, false).unwrap();
+
+        let removed = store.delete_session(&a.id).unwrap();
+        assert_eq!(removed.id, a.id);
+
+        let left = store.sessions().unwrap();
+        assert_eq!(left.len(), 1);
+        assert_eq!(left[0].id, b.id, "the other session survives intact");
+        assert_eq!(left[0].seconds, 900);
+        assert_eq!(left[0].task_id.as_deref(), Some("task_1"));
+    }
+
+    #[test]
+    fn deleting_a_session_that_is_not_there_is_an_error() {
+        let store = temp_store("delete-session-missing");
+        assert!(store.delete_session("session_nope").is_err());
     }
 
     #[test]

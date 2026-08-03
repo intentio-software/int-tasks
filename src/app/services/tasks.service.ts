@@ -23,6 +23,7 @@ export class TasksService {
   readonly projectLabels = signal<LabelUse[]>([]);
   readonly tagLabels = signal<LabelUse[]>([]);
   readonly settings = signal<Settings | null>(null);
+  readonly sessions = signal<Session[]>([]);
   readonly date = signal<string>("");
   readonly error = signal<string | null>(null);
   readonly storePath = signal<string>("");
@@ -205,9 +206,25 @@ export class TasksService {
     this.timer.set(await invoke<TimerState>("resume_timer"));
   }
 
+  /** Recorded sessions, newest first. */
+  async loadSessions(): Promise<void> {
+    try {
+      const sessions = await invoke<Session[]>("sessions");
+      this.sessions.set([...sessions].sort((a, b) => b.started_at - a.started_at));
+    } catch {
+      // The history is a review surface; failing to read it must not break the app.
+    }
+  }
+
+  async deleteSession(sessionId: string): Promise<void> {
+    await this.guard(() => invoke<Session>("delete_session", { sessionId }));
+    await this.loadSessions();
+  }
+
   /** Attribute a recorded session to a task, or to nothing when null. */
   async assignSession(sessionId: string, taskId: string | null): Promise<void> {
     await this.guard(() => invoke<Session>("assign_session", { sessionId, taskId }));
+    await this.loadSessions();
   }
 
   /**

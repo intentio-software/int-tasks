@@ -90,12 +90,17 @@ export interface TodayEntry extends Task {
   reason: TodayReason;
 }
 
-/** A recorded stretch of work. */
+/**
+ * A recorded stretch of work.
+ *
+ * Snake case because `Session` is serialised as declared — unlike `Settings`
+ * and `Stats`, which carry a camelCase rename.
+ */
 export interface Session {
   id: string;
-  taskId?: string;
-  startedAt: number;
-  endedAt: number;
+  task_id?: string;
+  started_at: number;
+  ended_at: number;
   seconds: number;
   kind: SessionKind;
   completed: boolean;

@@ -76,7 +76,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         &[
             &MenuItem::with_id(app, "view-today", "Today", true, Some("CmdOrCtrl+1"))?,
             &MenuItem::with_id(app, "view-board", "Board", true, Some("CmdOrCtrl+2"))?,
-            &MenuItem::with_id(app, "view-matrix", "Matrix", true, Some("CmdOrCtrl+3"))?,
+            &MenuItem::with_id(app, "view-flow", "Flow", true, Some("CmdOrCtrl+3"))?,
             &PredefinedMenuItem::separator(app)?,
             &MenuItem::with_id(app, "manage-labels", "Projects & Tags…", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app)?,

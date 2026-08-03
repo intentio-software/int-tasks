@@ -213,6 +213,30 @@ impl ToolProvider for TaskTools {
                 ),
             ),
             Tool::new(
+                "sessions",
+                "Recorded focus and break sessions, newest first. Use this to review or correct what time was logged against.",
+                Self::object(
+                    json!({"limit": {"type": "integer", "description": "Default 50."}}),
+                    &[],
+                ),
+            ),
+            Tool::new(
+                "assign_session",
+                "Attribute a recorded session to a task, or pass no task_id to leave it unattributed. This is the correction for time logged against the wrong thing.",
+                Self::object(
+                    json!({
+                        "session_id": {"type": "string"},
+                        "task_id": {"type": "string", "description": "Omit to clear the attribution."}
+                    }),
+                    &["session_id"],
+                ),
+            ),
+            Tool::new(
+                "delete_session",
+                "Remove a recorded session — a timer left running, or time logged twice. Confirm with the user first: reassigning is usually the right correction, and deleting changes every report the session fed.",
+                Self::object(json!({"session_id": {"type": "string"}}), &["session_id"]),
+            ),
+            Tool::new(
                 "time_summary",
                 "Total focus time and a per-task breakdown. Breaks are excluded.",
                 Self::object(
@@ -597,6 +621,49 @@ impl ToolProvider for TaskTools {
                 Ok(ToolOutput::json(&json!({
                     "cleared": name.trim(),
                     "tasks_updated": touched,
+                })))
+            }
+
+            "sessions" => {
+                let limit = opt_usize(args, "limit", 50);
+                let mut sessions = store.sessions().map_err(err)?;
+                sessions.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+                sessions.truncate(limit);
+                let data = store.read().map_err(err)?;
+                let listed: Vec<Value> = sessions
+                    .iter()
+                    .map(|session| {
+                        json!({
+                            "id": session.id,
+                            "task_id": session.task_id,
+                            "task": session.task_id.as_deref().and_then(|id| data.task(id)).map(|task| task.title.clone()),
+                            "minutes": session.seconds / 60,
+                            "kind": session.kind,
+                            "completed": session.completed,
+                            "started_at": session.started_at,
+                        })
+                    })
+                    .collect();
+                Ok(ToolOutput::json(&json!({ "sessions": listed })))
+            }
+
+            "assign_session" => {
+                let session_id = require_str(args, "session_id")?;
+                let task_id = opt_str(args, "task_id");
+                let updated = store.assign_session(&session_id, task_id.as_deref()).map_err(err)?;
+                Ok(ToolOutput::json(&json!({
+                    "session": updated.id,
+                    "task_id": updated.task_id,
+                })))
+            }
+
+            "delete_session" => {
+                let session_id = require_str(args, "session_id")?;
+                let removed = store.delete_session(&session_id).map_err(err)?;
+                Ok(ToolOutput::json(&json!({
+                    "deleted": removed.id,
+                    "minutes": removed.seconds / 60,
+                    "recoverable": false,
                 })))
             }
 

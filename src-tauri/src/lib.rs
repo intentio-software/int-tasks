@@ -334,6 +334,11 @@ fn assign_session(state: State<'_, AppState>, session_id: String, task_id: Optio
 }
 
 #[tauri::command]
+fn delete_session(state: State<'_, AppState>, session_id: String) -> Result<Session, String> {
+    state.store.delete_session(&session_id).map_err(fail)
+}
+
+#[tauri::command]
 fn store_path(state: State<'_, AppState>) -> String {
     state.store.root().to_string_lossy().to_string()
 }
@@ -475,6 +480,7 @@ pub fn run() {
             timer_state,
             sessions,
             assign_session,
+            delete_session,
             store_path,
             has_native_menu,
         ])

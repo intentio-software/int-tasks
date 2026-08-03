@@ -21,13 +21,14 @@ import { LabelEdit, LabelKind, LabelsDialogComponent } from "./components/labels
 import { MatrixViewComponent } from "./components/matrix-view.component";
 import { TaskDetailComponent } from "./components/task-detail.component";
 import { TaskAction, TaskMenuComponent } from "./components/task-menu.component";
+import { SessionLogComponent } from "./components/session-log.component";
 import { TaskRowComponent } from "./components/task-row.component";
 import { List, Plotted, Session, Task } from "./models/task.models";
 import { TasksService } from "./services/tasks.service";
 import { ThemeService } from "./services/theme.service";
 import { UpdaterService } from "./services/updater.service";
 
-type View = "today" | "board" | "matrix";
+type View = "today" | "board" | "flow";
 
 @Component({
   selector: "app-root",
@@ -43,6 +44,7 @@ type View = "today" | "board" | "matrix";
     LabelsDialogComponent,
     MatrixViewComponent,
     TaskDetailComponent,
+    SessionLogComponent,
     TaskMenuComponent,
     TaskRowComponent
   ],
@@ -152,14 +154,18 @@ export class AppComponent implements OnInit, OnDestroy {
     void this.connectMenu();
     void this.loadVersion();
 
+    void this.tasks.loadSessions();
+
     this.finishedUnlisten = await listen("timer-finished", () => {
       void this.tasks.load();
+      void this.tasks.loadSessions();
     }).catch(() => null as unknown as UnlistenFn);
 
     // Rust raises the window before emitting this, so the question arrives on
     // screen rather than behind whatever the user moved on to.
     this.unassignedUnlisten = await listen<Session>("session-unassigned", (event) => {
       void this.tasks.load();
+      void this.tasks.loadSessions();
       this.unassignedSession.set(event.payload);
     }).catch(() => null as unknown as UnlistenFn);
 
@@ -275,7 +281,7 @@ export class AppComponent implements OnInit, OnDestroy {
     const picked = await this.tasks.suggest(lowEnergy);
     this.suggestion.set(picked);
     if (picked) {
-      this.view.set("matrix");
+      this.view.set("flow");
     }
   }
 
@@ -440,8 +446,8 @@ export class AppComponent implements OnInit, OnDestroy {
       case "view-board":
         this.view.set("board");
         break;
-      case "view-matrix":
-        this.view.set("matrix");
+      case "view-flow":
+        this.view.set("flow");
         break;
       case "manage-labels":
         this.labelsOpen.set(true);
@@ -599,6 +605,14 @@ export class AppComponent implements OnInit, OnDestroy {
     } else {
       await this.tasks.pauseTimer();
     }
+  }
+
+  async reassignSession(change: { sessionId: string; taskId: string | null }): Promise<void> {
+    await this.tasks.assignSession(change.sessionId, change.taskId);
+  }
+
+  async removeSession(sessionId: string): Promise<void> {
+    await this.tasks.deleteSession(sessionId);
   }
 
 }
