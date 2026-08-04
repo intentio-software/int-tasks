@@ -89,6 +89,34 @@ pub struct Task {
     /// Unused today; present so synced tasks can be matched rather than duplicated.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub external_id: Option<String>,
+
+    /// Who the task belongs to. Empty means you: a personal store stays
+    /// personal, and nothing has to be filled in to use the app alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assignee: Option<String>,
+
+    /// Who put it there, so an unexpected task is never mysterious.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assigned_by: Option<String>,
+
+    /// Where it came from, as `scheme:reference` — `mindmap:<map>#<node>`,
+    /// `knowledge:<note path>`, `ims:<id>`. A plain string rather than a struct
+    /// so it stays greppable in the log and costs nothing when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<String>,
+
+    /// Bumped on every change to this task.
+    ///
+    /// Per task rather than per store: two devices editing two different tasks
+    /// must not conflict, which is the whole reason the store is a log.
+    #[serde(default)]
+    pub revision: u64,
+
+    /// A tombstone. Deleted tasks stay in the log so the deletion itself can
+    /// be carried to another device — a missing line is not a delete, it is
+    /// just a line another device has not seen yet.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub deleted: bool,
 }
 
 impl Task {
@@ -114,6 +142,11 @@ impl Task {
             updated_at: now,
             completed_at: None,
             external_id: None,
+            assignee: None,
+            assigned_by: None,
+            origin: None,
+            revision: 0,
+            deleted: false,
         }
     }
 

@@ -27,6 +27,13 @@ export interface Task {
   updated_at: number;
   completed_at?: number;
   external_id?: string;
+  /** Who the task belongs to. Absent means you. */
+  assignee?: string;
+  assigned_by?: string;
+  /** `scheme:reference` — where the task came from. */
+  origin?: string;
+  /** Bumped per task, so two devices editing different tasks cannot conflict. */
+  revision?: number;
 }
 
 export interface List {

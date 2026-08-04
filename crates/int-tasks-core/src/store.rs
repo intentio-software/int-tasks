@@ -11,6 +11,7 @@
 //! half-written store, which for a single-user local app is the failure that
 //! actually matters.
 
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -20,11 +21,22 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Result, TaskError};
 use crate::model::{Board, List, Session, Status, Task, new_id, now_millis};
 
-pub const TASKS_FILE: &str = "tasks.json";
+/// The single-document store this replaced. Read once, on migration.
+pub const LEGACY_TASKS_FILE: &str = "tasks.json";
+/// Tasks, one JSON record per line, appended.
+pub const TASKS_FILE: &str = "tasks.jsonl";
+/// Boards and settings — structural, small, and rarely written.
+pub const META_FILE: &str = "meta.json";
 pub const SESSIONS_FILE: &str = "sessions.jsonl";
 
+/// Compact once the log holds this many times more lines than live tasks,
+/// and at least this many lines. Rewriting on every save would give up the
+/// append-only property that makes the log mergeable in the first place.
+const COMPACT_RATIO: usize = 4;
+const COMPACT_FLOOR: usize = 200;
+
 /// User preferences, kept alongside the data so there is one file to move.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     /// Focus sessions aimed for each day.
@@ -173,6 +185,16 @@ pub struct Store {
     root: PathBuf,
 }
 
+/// Whether two versions of a task differ in anything a user could have changed.
+///
+/// `revision` and `updated_at` are bookkeeping: comparing them would make every
+/// task look changed on every save and turn the log into a transcript of saves
+/// rather than of edits.
+fn same_task(a: &Task, b: &Task) -> bool {
+    let strip = |task: &Task| Task { revision: 0, updated_at: 0, ..task.clone() };
+    strip(a) == strip(b)
+}
+
 impl Store {
     /// Open a store, creating the directory and a seeded `tasks.json` if needed.
     ///
@@ -182,7 +204,12 @@ impl Store {
         let root = root.as_ref().to_path_buf();
         fs::create_dir_all(&root)?;
         let store = Store { root };
-        if !store.tasks_path().exists() {
+        // A document store is migrated here rather than seeded over. Checking
+        // only for the log would treat an existing tasks.json as an empty
+        // store and write an empty log beside it, which reads as total loss.
+        if store.legacy_path().exists() && !store.tasks_path().exists() {
+            store.migrate_from_document()?;
+        } else if !store.tasks_path().exists() {
             store.write(&Data::seeded())?;
         }
         Ok(store)
@@ -211,7 +238,28 @@ impl Store {
 
     /// Read the store. A missing file reads as a seeded store rather than an error.
     pub fn read(&self) -> Result<Data> {
-        let path = self.tasks_path();
+        // A log to replay, a document to migrate, or nothing at all.
+        if self.tasks_path().exists() {
+            let meta = self.read_meta()?;
+            return Ok(Data { tasks: self.replay_tasks()?, ..meta });
+        }
+        if self.legacy_path().exists() {
+            return self.migrate_from_document();
+        }
+        Ok(Data::seeded())
+    }
+
+    fn legacy_path(&self) -> PathBuf {
+        self.root.join(LEGACY_TASKS_FILE)
+    }
+
+    fn meta_path(&self) -> PathBuf {
+        self.root.join(META_FILE)
+    }
+
+    /// Boards and settings, with the tasks left empty for the caller to fill.
+    fn read_meta(&self) -> Result<Data> {
+        let path = self.meta_path();
         if !path.exists() {
             return Ok(Data::seeded());
         }
@@ -222,30 +270,167 @@ impl Store {
         serde_json::from_str(&text).map_err(|err| TaskError::Corrupt(err.to_string()))
     }
 
-    /// Write the store atomically.
+    /// Fold the log down to the live tasks.
     ///
-    /// Serialize, write to a temp file in the same directory, then rename over
-    /// the original — a rename within one filesystem is atomic, so a reader sees
-    /// either the old file or the new one, never a truncated one.
-    pub fn write(&self, data: &Data) -> Result<()> {
-        let json = serde_json::to_string_pretty(data).map_err(|err| TaskError::Corrupt(err.to_string()))?;
-        let target = self.tasks_path();
-        let temp = self.root.join(format!(".{TASKS_FILE}.{}.tmp", std::process::id()));
-        fs::write(&temp, format!("{json}\n"))?;
-        fs::rename(&temp, &target)?;
+    /// The newest record for each id wins, by revision and then by write time.
+    /// That is what makes two devices' logs safe to concatenate: order within
+    /// the file stops mattering, so a merge never has to be clever.
+    fn replay_tasks(&self) -> Result<Vec<Task>> {
+        let text = fs::read_to_string(self.tasks_path())?;
+        let mut latest: HashMap<String, Task> = HashMap::new();
+        let mut seen = 0usize;
+        let mut unreadable = 0usize;
+        for line in text.lines() {
+            let line = line.trim();
+            if line.is_empty() {
+                continue;
+            }
+            seen += 1;
+            // One unreadable line is skipped: losing a single task is bad,
+            // failing the whole load is unrecoverable. A file where nothing
+            // parses is a different thing — that is corruption, and silently
+            // presenting it as an empty store would be the worst outcome of all.
+            let Ok(task) = serde_json::from_str::<Task>(line) else {
+                unreadable += 1;
+                continue;
+            };
+            match latest.get(&task.id) {
+                Some(existing)
+                    if (existing.revision, existing.updated_at) > (task.revision, task.updated_at) => {}
+                _ => {
+                    latest.insert(task.id.clone(), task);
+                }
+            }
+        }
+        if seen > 0 && unreadable == seen {
+            return Err(TaskError::Corrupt(format!("no readable task records in {TASKS_FILE}")));
+        }
+        let mut tasks: Vec<Task> = latest.into_values().filter(|task| !task.deleted).collect();
+        // Replay order is arbitrary; give callers something stable.
+        tasks.sort_by(|a, b| a.created_at.cmp(&b.created_at).then_with(|| a.id.cmp(&b.id)));
+        Ok(tasks)
+    }
+
+    /// Carry a `tasks.json` store into the log, keeping the original.
+    fn migrate_from_document(&self) -> Result<Data> {
+        let text = fs::read_to_string(self.legacy_path())?;
+        let data: Data =
+            serde_json::from_str(&text).map_err(|err| TaskError::Corrupt(err.to_string()))?;
+
+        self.write_meta(&data)?;
+        let mut log = String::new();
+        for task in &data.tasks {
+            log.push_str(&serde_json::to_string(task).map_err(|e| TaskError::Corrupt(e.to_string()))?);
+            log.push('\n');
+        }
+        self.replace_file(&self.tasks_path(), &log)?;
+        // Kept, not deleted. If anything about the new format is wrong, the
+        // original is still sitting there to go back to.
+        let _ = fs::rename(self.legacy_path(), self.root.join(format!("{LEGACY_TASKS_FILE}.migrated")));
+        Ok(data)
+    }
+
+    fn write_meta(&self, data: &Data) -> Result<()> {
+        let meta = Data { tasks: Vec::new(), ..data.clone() };
+        let json =
+            serde_json::to_string_pretty(&meta).map_err(|err| TaskError::Corrupt(err.to_string()))?;
+        self.replace_file(&self.meta_path(), &format!("{json}\n"))
+    }
+
+    /// Write through a temp file and rename, so a crash never leaves a half file.
+    fn replace_file(&self, target: &Path, contents: &str) -> Result<()> {
+        let name = target.file_name().and_then(|n| n.to_str()).unwrap_or("store");
+        let temp = self.root.join(format!(".{name}.{}.tmp", std::process::id()));
+        fs::write(&temp, contents)?;
+        fs::rename(&temp, target)?;
         Ok(())
     }
 
-    /// Apply a change: read the current store, mutate it, write it back.
-    ///
-    /// Always re-reading means a change made by the other process between calls
-    /// is picked up rather than overwritten with a stale copy.
+    /// Seed an empty store.
+    pub fn write(&self, data: &Data) -> Result<()> {
+        self.write_meta(data)?;
+        let mut log = String::new();
+        for task in &data.tasks {
+            log.push_str(&serde_json::to_string(task).map_err(|e| TaskError::Corrupt(e.to_string()))?);
+            log.push('\n');
+        }
+        self.replace_file(&self.tasks_path(), &log)
+    }
+
     pub fn update<T>(&self, change: impl FnOnce(&mut Data) -> Result<T>) -> Result<T> {
-        let mut data = self.read()?;
+        let before = self.read()?;
+        let previous: HashMap<&str, &Task> =
+            before.tasks.iter().map(|task| (task.id.as_str(), task)).collect();
+
+        let mut data = before.clone();
         let outcome = change(&mut data)?;
         data.revision = data.revision.saturating_add(1);
-        self.write(&data)?;
+
+        // Only what actually changed is appended. Revisions are bumped here
+        // rather than at each of the several dozen mutation sites, so no caller
+        // can forget and quietly break the merge.
+        let now = crate::model::now_millis();
+        let mut appended: Vec<Task> = Vec::new();
+        for task in &mut data.tasks {
+            match previous.get(task.id.as_str()) {
+                Some(old) if same_task(old, task) => {}
+                Some(old) => {
+                    task.revision = old.revision.saturating_add(1);
+                    task.updated_at = now;
+                    appended.push(task.clone());
+                }
+                None => appended.push(task.clone()),
+            }
+        }
+
+        // Anything gone from the list becomes a tombstone, so the deletion can
+        // travel to another device instead of being silently re-created there.
+        let live: HashSet<&str> = data.tasks.iter().map(|task| task.id.as_str()).collect();
+        for old in &before.tasks {
+            if !live.contains(old.id.as_str()) {
+                let mut tombstone = old.clone();
+                tombstone.deleted = true;
+                tombstone.revision = old.revision.saturating_add(1);
+                tombstone.updated_at = now;
+                appended.push(tombstone);
+            }
+        }
+
+        if !appended.is_empty() {
+            let mut lines = String::new();
+            for task in &appended {
+                lines.push_str(
+                    &serde_json::to_string(task).map_err(|e| TaskError::Corrupt(e.to_string()))?,
+                );
+                lines.push('\n');
+            }
+            let mut file = OpenOptions::new().create(true).append(true).open(self.tasks_path())?;
+            file.write_all(lines.as_bytes())?;
+        }
+
+        // Always: `revision` lives here and callers use it to notice a change.
+        // It is a small file, and it is not the part that conflicts.
+        self.write_meta(&data)?;
+
+        self.maybe_compact(&data)?;
         Ok(outcome)
+    }
+
+    /// Fold the log back down to one line per task once it has grown long.
+    fn maybe_compact(&self, data: &Data) -> Result<()> {
+        let text = fs::read_to_string(self.tasks_path())?;
+        let lines = text.lines().filter(|line| !line.trim().is_empty()).count();
+        let live = data.tasks.len().max(1);
+        if lines < COMPACT_FLOOR || lines < live * COMPACT_RATIO {
+            return Ok(());
+        }
+        let mut compacted = String::new();
+        for task in &data.tasks {
+            compacted
+                .push_str(&serde_json::to_string(task).map_err(|e| TaskError::Corrupt(e.to_string()))?);
+            compacted.push('\n');
+        }
+        self.replace_file(&self.tasks_path(), &compacted)
     }
 
     // -----------------------------------------------------------------------
@@ -855,8 +1040,114 @@ mod tests {
     #[test]
     fn a_store_written_before_settings_existed_still_loads() {
         let store = temp_store("legacy");
-        fs::write(store.tasks_path(), r#"{"boards":[],"tasks":[],"revision":3}"#).unwrap();
+        let _ = fs::remove_file(store.tasks_path());
+        fs::write(store.legacy_path(), r#"{"boards":[],"tasks":[],"revision":3}"#).unwrap();
         assert_eq!(store.read().unwrap().settings.daily_focus_goal, 4);
+    }
+
+    #[test]
+    fn opening_a_document_store_migrates_it_rather_than_seeding_over_it() {
+        // The failure this guards against wrote an empty log beside a full
+        // tasks.json and reported no tasks at all.
+        let dir = std::env::temp_dir().join(format!("int-tasks-{}-open-migrate", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join(LEGACY_TASKS_FILE),
+            r#"{"boards":[{"id":"b1","name":"Tasks","order":0,"lists":[{"id":"l1","name":"To Do","order":0}]}],
+               "tasks":[{"id":"t1","title":"Must survive","list_id":"l1","created_at":1,"updated_at":1}],
+               "revision":12}"#,
+        )
+        .unwrap();
+
+        let store = Store::open(&dir).unwrap();
+        let data = store.read().unwrap();
+        assert_eq!(data.tasks.len(), 1, "opening must not lose the existing tasks");
+        assert_eq!(data.tasks[0].title, "Must survive");
+        assert_eq!(data.revision, 12);
+    }
+
+    #[test]
+    fn a_document_store_migrates_into_the_log() {
+        let store = temp_store("migrate");
+        let _ = fs::remove_file(store.tasks_path());
+        let document = r#"{"boards":[{"id":"b1","name":"Tasks","order":0,"lists":[{"id":"l1","name":"To Do","order":0}]}],
+            "tasks":[{"id":"t1","title":"Carried over","list_id":"l1","created_at":1,"updated_at":1},
+                     {"id":"t2","title":"Also carried","list_id":"l1","created_at":2,"updated_at":2}],
+            "revision":7}"#;
+        fs::write(store.legacy_path(), document).unwrap();
+
+        let data = store.read().expect("migrates");
+        assert_eq!(data.tasks.len(), 2);
+        assert_eq!(data.revision, 7, "the revision carries across");
+
+        // The log is now the store, and the original is kept rather than removed.
+        assert!(store.tasks_path().exists());
+        assert!(store.root().join("tasks.json.migrated").exists(), "the original is kept");
+        assert!(!store.legacy_path().exists());
+
+        // And it reads the same the second time, from the log rather than the document.
+        let again = store.read().unwrap();
+        assert_eq!(again.tasks.len(), 2);
+        assert_eq!(again.tasks[0].title, "Carried over");
+    }
+
+    #[test]
+    fn only_what_changed_is_appended() {
+        let store = temp_store("append-only");
+        let a = store.add_task("First", None).unwrap();
+        store.add_task("Second", None).unwrap();
+        let lines_before = fs::read_to_string(store.tasks_path()).unwrap().lines().count();
+
+        store.update(|data| {
+            data.task_mut(&a.id).unwrap().title = "First, renamed".into();
+            Ok(())
+        }).unwrap();
+
+        let lines_after = fs::read_to_string(store.tasks_path()).unwrap().lines().count();
+        assert_eq!(lines_after, lines_before + 1, "one edit, one line — not a rewrite");
+
+        let data = store.read().unwrap();
+        assert_eq!(data.tasks.len(), 2, "the newest record wins, it does not duplicate");
+        let renamed = data.tasks.iter().find(|t| t.id == a.id).unwrap();
+        assert_eq!(renamed.title, "First, renamed");
+        assert_eq!(renamed.revision, 1, "revision bumped once");
+    }
+
+    #[test]
+    fn a_deleted_task_leaves_a_tombstone() {
+        let store = temp_store("tombstone");
+        let task = store.add_task("Doomed", None).unwrap();
+        store.delete_task(&task.id).unwrap();
+
+        assert!(store.read().unwrap().tasks.is_empty());
+        // The deletion has to be a record, or another device would simply put
+        // the task back the next time the logs met.
+        let log = fs::read_to_string(store.tasks_path()).unwrap();
+        assert!(log.contains("\"deleted\":true"), "the delete is written down");
+    }
+
+    #[test]
+    fn concatenated_logs_resolve_to_the_newer_record() {
+        // What a merge of two devices' files will look like: the same task
+        // twice, in either order, and the higher revision has to win.
+        let store = temp_store("merge");
+        let task = store.add_task("Shared", None).unwrap();
+        let mut newer = task.clone();
+        newer.title = "Edited elsewhere".into();
+        newer.revision = 9;
+        newer.updated_at = task.updated_at + 1000;
+
+        let mut log = String::new();
+        log.push_str(&serde_json::to_string(&newer).unwrap());
+        log.push('\n');
+        log.push_str(&serde_json::to_string(&task).unwrap());
+        log.push('\n');
+        fs::write(store.tasks_path(), log).unwrap();
+
+        let data = store.read().unwrap();
+        assert_eq!(data.tasks.len(), 1, "one task, not two");
+        assert_eq!(data.tasks[0].title, "Edited elsewhere", "order in the file must not matter");
     }
 
     #[test]
@@ -970,5 +1261,18 @@ mod tests {
         fs::write(store.tasks_path(), "{ this is not json").unwrap();
         // Losing someone's tasks to a silent re-seed would be far worse than an error.
         assert!(matches!(store.read(), Err(TaskError::Corrupt(_))));
+    }
+
+    #[test]
+    fn one_bad_line_does_not_cost_the_rest_of_the_store() {
+        let store = temp_store("corrupt-line");
+        let good = store.add_task("Survivor", None).unwrap();
+        let mut log = fs::read_to_string(store.tasks_path()).unwrap();
+        log.push_str("{ half a record\n");
+        fs::write(store.tasks_path(), log).unwrap();
+
+        let data = store.read().expect("the readable records still load");
+        assert_eq!(data.tasks.len(), 1);
+        assert_eq!(data.tasks[0].id, good.id);
     }
 }
