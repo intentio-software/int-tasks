@@ -1,3 +1,10 @@
+# [1.10.0](https://github.com/intentio-software/int-tasks/compare/v1.9.0...v1.10.0) (2026-08-04)
+
+
+### Features
+
+* store tasks as an append-only log, ready to merge ([58902de](https://github.com/intentio-software/int-tasks/commit/58902de8de680cdce8d550bb39cfeeef24482abd))
+
 # [1.9.0](https://github.com/intentio-software/int-tasks/compare/v1.8.0...v1.9.0) (2026-08-03)
 
 
