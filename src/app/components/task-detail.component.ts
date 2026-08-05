@@ -10,7 +10,7 @@ import {
 import { CommonModule } from "@angular/common";
 import { FormsModule } from "@angular/forms";
 
-import { Task } from "../models/task.models";
+import { Task, TaskContext } from "../models/task.models";
 
 /**
  * The panel for everything a task can carry beyond its title.
@@ -96,6 +96,24 @@ import { Task } from "../models/task.models";
           </label>
         </div>
 
+        @if (context; as ctx) {
+          <div class="context">
+            <div class="context-head">
+              <i class="pi" [ngClass]="ctx.kind === 'mindmap' ? 'pi-sitemap' : 'pi-book'"></i>
+              <span class="context-label">{{ ctx.label }}</span>
+              <span class="context-kind">{{ ctx.kind === 'mindmap' ? 'from a map' : 'from a note' }}</span>
+            </div>
+            @if (ctx.unavailable) {
+              <p class="context-missing">{{ ctx.unavailable }}</p>
+            } @else if (ctx.excerpt) {
+              <pre class="context-excerpt">{{ ctx.excerpt }}</pre>
+              @if (ctx.truncated) {
+                <span class="context-more">…more in the note</span>
+              }
+            }
+          </div>
+        }
+
         <label class="field">
           <span>Type tags</span>
           <input
@@ -145,6 +163,60 @@ import { Task } from "../models/task.models";
   `,
   styles: [
     `
+      /* Context sits among the fields rather than at the top: the task is
+         still the subject, this is only what it was about. */
+      .context {
+        margin-top: 0.2rem;
+        padding: 0.55rem 0.7rem;
+        border: 1px solid var(--border);
+        border-left: 2px solid var(--accent);
+        border-radius: 8px;
+        background: var(--panel);
+        min-width: 0;
+      }
+      .context-head {
+        display: flex;
+        align-items: baseline;
+        gap: 0.45rem;
+        font-size: 0.8rem;
+        min-width: 0;
+      }
+      .context-head i {
+        flex: none;
+        color: var(--accent);
+        font-size: 0.72rem;
+      }
+      .context-label {
+        flex: 1;
+        min-width: 0;
+        color: var(--ink-strong);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .context-kind {
+        flex: none;
+        font-size: 0.68rem;
+        color: var(--ink-faint);
+      }
+      .context-excerpt {
+        margin: 0.45rem 0 0;
+        max-height: 9rem;
+        overflow-y: auto;
+        font: inherit;
+        font-size: 0.76rem;
+        line-height: 1.55;
+        color: var(--ink-muted);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .context-more,
+      .context-missing {
+        display: block;
+        margin-top: 0.35rem;
+        font-size: 0.7rem;
+        color: var(--ink-faint);
+      }
       .backdrop {
         position: fixed;
         inset: 0;
@@ -299,6 +371,9 @@ export class TaskDetailComponent {
   @Input() knownProjects: string[] = [];
   /** Tags already in use, offered as one-click chips. */
   @Input() knownTags: string[] = [];
+
+  /** The note or map this task came from, once resolved. */
+  @Input() context: TaskContext | null = null;
 
   @Input({ required: true }) set task(value: Task) {
     this.current = value;

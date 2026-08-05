@@ -136,6 +136,15 @@ export interface DayProgress {
   points: number;
 }
 
+/** The note or map a task came from, resolved for display. */
+export interface TaskContext {
+  kind: string;
+  label: string;
+  excerpt: string;
+  truncated: boolean;
+  unavailable?: string;
+}
+
 export interface TaskTime {
   task_id: string;
   title?: string;

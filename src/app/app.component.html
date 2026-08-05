@@ -281,6 +281,7 @@
 @if (editing(); as task) {
   <app-task-detail
     [task]="task"
+    [context]="editingContext()"
     [knownProjects]="tasks.projects()"
     [knownTags]="tasks.tagNames()"
     (changed)="applyEdit($event)"

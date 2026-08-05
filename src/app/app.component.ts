@@ -26,7 +26,7 @@ import { ProgressTrendComponent } from "./components/progress-trend.component";
 import { SessionLogComponent } from "./components/session-log.component";
 import { WorkingRhythmComponent } from "./components/working-rhythm.component";
 import { TaskRowComponent } from "./components/task-row.component";
-import { List, Plotted, Session, Task } from "./models/task.models";
+import { List, Plotted, Session, Task, TaskContext } from "./models/task.models";
 import { TasksService } from "./services/tasks.service";
 import { ThemeService } from "./services/theme.service";
 import { UpdaterService } from "./services/updater.service";
@@ -73,6 +73,8 @@ export class AppComponent implements OnInit, OnDestroy {
   readonly draft = signal("");
   /** Task shown in the detail panel, if any. */
   readonly editing = signal<Task | null>(null);
+  /** Where the task being edited came from, once looked up. */
+  readonly editingContext = signal<TaskContext | null>(null);
   /** The last suggestion, so it can be shown and acted on. */
   readonly suggestion = signal<Plotted | null>(null);
   /** Empty means every project. */
@@ -243,6 +245,17 @@ export class AppComponent implements OnInit, OnDestroy {
 
   open(task: Task): void {
     this.editing.set(task);
+    // Cleared first: the previous task's context lingering under a new one
+    // would be worse than a moment with none.
+    this.editingContext.set(null);
+    if (task.origin) {
+      void this.tasks.taskContext(task.origin).then((context) => {
+        // The panel may have moved on while the note was being read.
+        if (this.editing()?.id === task.id) {
+          this.editingContext.set(context);
+        }
+      });
+    }
   }
 
   /** Re-read the edited task so the panel shows what was actually stored. */

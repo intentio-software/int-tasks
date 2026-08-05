@@ -2,7 +2,7 @@ import { Injectable, computed, signal } from "@angular/core";
 import { invoke } from "@tauri-apps/api/core";
 import { UnlistenFn, listen } from "@tauri-apps/api/event";
 
-import { Board, DayProgress, LabelUse, List, Plotted, Session, Settings, Snapshot, Stats, Task, TimeSummary, TimerState, TodayEntry } from "../models/task.models";
+import { Board, DayProgress, LabelUse, List, Plotted, Session, Settings, Snapshot, Stats, Task, TaskContext, TimeSummary, TimerState, TodayEntry } from "../models/task.models";
 
 /**
  * The app's single source of truth.
@@ -234,6 +234,16 @@ export class TasksService {
   }
 
   /** Attribute a recorded session to a task, or to nothing when null. */
+  /** Resolve a task's origin into the note or map behind it. */
+  async taskContext(origin: string): Promise<TaskContext | null> {
+    try {
+      return await invoke<TaskContext>("task_context", { origin });
+    } catch {
+      // Context is a convenience; failing to fetch it must not break the panel.
+      return null;
+    }
+  }
+
   async assignSession(sessionId: string, taskId: string | null): Promise<void> {
     await this.guard(() => invoke<Session>("assign_session", { sessionId, taskId }));
     await this.loadSessions();

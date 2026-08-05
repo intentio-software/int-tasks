@@ -3,6 +3,7 @@
 //! Every command goes through `int-tasks-core` — the same crate the MCP server
 //! uses — so the app and an agent see one store with one set of rules.
 
+pub mod knowledge_bridge;
 mod menu;
 mod timer;
 
@@ -497,6 +498,7 @@ pub fn run() {
             assign_session,
             delete_session,
             store_path,
+            knowledge_bridge::task_context,
             has_native_menu,
         ])
         .run(tauri::generate_context!())
