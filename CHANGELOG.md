@@ -1,3 +1,10 @@
+# [1.12.0](https://github.com/intentio-software/int-tasks/compare/v1.11.0...v1.12.0) (2026-08-05)
+
+
+### Features
+
+* show the note a task came from, inside the task ([e8216f4](https://github.com/intentio-software/int-tasks/commit/e8216f496c97df99ea3d18344b0466950b7e3102))
+
 # [1.11.0](https://github.com/intentio-software/int-tasks/compare/v1.10.0...v1.11.0) (2026-08-05)
 
 
