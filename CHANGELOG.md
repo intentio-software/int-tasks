@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/intentio-software/int-tasks/compare/v1.10.0...v1.11.0) (2026-08-05)
+
+
+### Features
+
+* let add_task record where a task came from ([50a1c02](https://github.com/intentio-software/int-tasks/commit/50a1c02b858768d509a78d23edfb72217b1c4bbd))
+
 # [1.10.0](https://github.com/intentio-software/int-tasks/compare/v1.9.0...v1.10.0) (2026-08-04)
 
 
