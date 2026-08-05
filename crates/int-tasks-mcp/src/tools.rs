@@ -99,7 +99,8 @@ impl ToolProvider for TaskTools {
                         "impact": {"type": "integer", "description": "How much finishing it is worth, 1-10. Omit unless the user said."},
                         "effort": {"type": "integer", "description": "How much it will cost, 1-10. Omit unless the user said."},
                         "priority": {"type": "integer", "description": "1 is highest. Omit if unstated."},
-                        "estimate_minutes": {"type": "integer", "description": "Rough size, for planning against pomodoro sessions."}
+                        "estimate_minutes": {"type": "integer", "description": "Rough size, for planning against pomodoro sessions."},
+                        "origin": {"type": "string", "description": "Where the task came from, as `scheme:reference` — `mindmap:<map>#<node>`, `knowledge:<note path>`. Set this when creating a task on behalf of another app so it can be traced back."}
                     }),
                     &["title"],
                 ),
@@ -322,11 +323,13 @@ impl ToolProvider for TaskTools {
                 let estimate = args.get("estimate_minutes").and_then(Value::as_u64).map(|m| m as u32);
                 let notes = opt_str(args, "notes");
                 let project = opt_str(args, "project");
+                let origin = opt_str(args, "origin");
                 let impact = args.get("impact").and_then(Value::as_u64).map(|v| (v as u8).clamp(1, 10));
                 let effort = args.get("effort").and_then(Value::as_u64).map(|v| (v as u8).clamp(1, 10));
 
                 if due.is_some() || !tags.is_empty() || today || priority.is_some() || estimate.is_some()
-                    || notes.is_some() || project.is_some() || impact.is_some() || effort.is_some() {
+                    || notes.is_some() || project.is_some() || impact.is_some() || effort.is_some()
+                    || origin.is_some() {
                     store
                         .update(|data| {
                             let stored = data.task_mut(&task.id).expect("just added");
@@ -356,6 +359,9 @@ impl ToolProvider for TaskTools {
                             }
                             if effort.is_some() {
                                 stored.effort = effort;
+                            }
+                            if origin.is_some() {
+                                stored.origin = origin;
                             }
                             stored.touch();
                             Ok(())
@@ -793,6 +799,15 @@ mod tests {
         }));
         assert_eq!(added["added"]["title"], "ship the thing");
         assert_eq!(added["added"]["project"], "acme");
+    }
+
+    #[test]
+    fn a_task_created_for_another_app_remembers_where_it_came_from() {
+        let mut t = tools("origin");
+        let added = call(&mut t, "add_task", json!({
+            "title": "Wire up billing", "origin": "mindmap:map_7#node_3"
+        }));
+        assert_eq!(added["added"]["origin"], "mindmap:map_7#node_3");
     }
 
     #[test]
