@@ -5,12 +5,17 @@
 //! already write by hand is treated as input:
 //!
 //! ```text
-//! (stm) [chore] clean up the front end login page
+//! (stm) [chore] clean up the front end login page @vernon due:2026-09-01
 //! ```
 //!
 //! becomes the title `clean up the front end login page`, filed under project
-//! `stm` and tagged `chore`. Both markers are optional and may appear in either
-//! order.
+//! `stm`, tagged `chore`, owned by `vernon` and due on 1 September. Every marker
+//! is optional.
+//!
+//! Project and tag are read from the front, owner and due date from the back,
+//! which is both how people write them and what keeps prose safe: `email
+//! max@intentio.co.za` ends in a token that does not begin with `@`, so nothing
+//! is taken from it.
 //!
 //! Parsing only ever happens on capture. Editing a title later leaves it exactly
 //! as typed, because a field that silently rewrites itself while you are working
@@ -22,6 +27,10 @@ pub struct Captured {
     pub title: String,
     pub project: Option<String>,
     pub tags: Vec<String>,
+    /// Who the task is for, from a trailing `@owner`.
+    pub owner: Option<String>,
+    /// `YYYY-MM-DD`, from a trailing `due:`.
+    pub due: Option<String>,
 }
 
 /// Split a typed line into a title, a project and type tags.
@@ -47,22 +56,75 @@ pub fn parse(input: &str) -> Captured {
         rest = remainder;
     }
 
-    let mut title = String::new();
+    let mut body = String::new();
     for piece in kept {
-        title.push_str(piece.trim());
-        title.push(' ');
+        body.push_str(piece.trim());
+        body.push(' ');
     }
-    title.push_str(rest);
-    let title = title.trim().to_string();
+    body.push_str(rest);
+    let body = body.trim();
+
+    // Owner and due date are taken off the end, rightmost first.
+    let mut owner: Option<String> = None;
+    let mut due: Option<String> = None;
+    let mut head = body;
+    while let Some((trailing, remainder)) = take_trailing(head) {
+        match trailing {
+            Trailing::Owner(name) if owner.is_none() => owner = Some(name.to_string()),
+            Trailing::Due(date) if due.is_none() => due = Some(date.to_string()),
+            // A second one of either is not a correction; leave it in the title
+            // rather than quietly replacing what was already read.
+            _ => break,
+        }
+        head = remainder;
+    }
+
+    let title = head.trim().to_string();
 
     // A line that is nothing but markers has no title to show in a list, so it
     // is left exactly as typed rather than becoming an unidentifiable task.
     if title.is_empty() {
-        return Captured { title: input.trim().to_string(), project: None, tags: Vec::new() };
+        return Captured {
+            title: input.trim().to_string(),
+            project: None,
+            tags: Vec::new(),
+            owner: None,
+            due: None,
+        };
     }
 
     tags.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
-    Captured { title, project, tags }
+    Captured { title, project, tags, owner, due }
+}
+
+enum Trailing<'a> {
+    Owner(&'a str),
+    Due(&'a str),
+}
+
+/// Take one trailing `@owner` or `due:YYYY-MM-DD`, returning what precedes it.
+///
+/// Only a whole final token counts, so a bracketed aside or an address in the
+/// middle of a sentence is never touched. The date must be a real one: a
+/// `due:soon` is prose, and reading it as a date would be a guess.
+fn take_trailing(input: &str) -> Option<(Trailing<'_>, &str)> {
+    let trimmed = input.trim_end();
+    let (head, token) = match trimmed.rfind(char::is_whitespace) {
+        Some(at) => (&trimmed[..at], &trimmed[at + 1..]),
+        None => ("", trimmed),
+    };
+
+    if let Some(name) = token.strip_prefix('@') {
+        if !name.is_empty() {
+            return Some((Trailing::Owner(name), head));
+        }
+    }
+    if let Some(date) = token.strip_prefix("due:") {
+        if crate::dates::civil_days(date).is_some() {
+            return Some((Trailing::Due(date), head));
+        }
+    }
+    None
 }
 
 /// Take one leading `(word)` or `[word]` marker.
@@ -94,6 +156,86 @@ mod tests {
     fn parsed(input: &str) -> (String, Option<String>, Vec<String>) {
         let captured = parse(input);
         (captured.title, captured.project, captured.tags)
+    }
+
+    #[test]
+    fn the_whole_convention_reads_as_one_line() {
+        let captured = parse("(stm) [chore] clean up the login page @vernon due:2026-09-01");
+        assert_eq!(captured.title, "clean up the login page");
+        assert_eq!(captured.project.as_deref(), Some("stm"));
+        assert_eq!(captured.tags, vec!["chore"]);
+        assert_eq!(captured.owner.as_deref(), Some("vernon"));
+        assert_eq!(captured.due.as_deref(), Some("2026-09-01"));
+    }
+
+    #[test]
+    fn owner_and_due_may_be_written_in_either_order() {
+        let captured = parse("ship the release due:2026-09-01 @max");
+        assert_eq!(captured.title, "ship the release");
+        assert_eq!(captured.owner.as_deref(), Some("max"));
+        assert_eq!(captured.due.as_deref(), Some("2026-09-01"));
+    }
+
+    #[test]
+    fn either_trailing_marker_is_optional() {
+        let owned = parse("review the contract @vernon");
+        assert_eq!(owned.title, "review the contract");
+        assert_eq!(owned.owner.as_deref(), Some("vernon"));
+        assert_eq!(owned.due, None);
+
+        let dated = parse("review the contract due:2026-09-01");
+        assert_eq!(dated.title, "review the contract");
+        assert_eq!(dated.due.as_deref(), Some("2026-09-01"));
+        assert_eq!(dated.owner, None);
+    }
+
+    #[test]
+    fn an_address_in_the_middle_of_a_line_is_left_alone() {
+        // The reason owner is read from the end and not from anywhere.
+        let captured = parse("email max@intentio.co.za about the invoice");
+        assert_eq!(captured.title, "email max@intentio.co.za about the invoice");
+        assert_eq!(captured.owner, None);
+    }
+
+    #[test]
+    fn a_trailing_address_is_not_mistaken_for_an_owner() {
+        let captured = parse("chase the invoice with accounts@acme.com");
+        assert_eq!(captured.title, "chase the invoice with accounts@acme.com");
+        assert_eq!(captured.owner, None);
+    }
+
+    #[test]
+    fn a_due_date_has_to_be_a_date() {
+        // "soon" is prose, and reading it as a date would be a guess.
+        let captured = parse("renew the certificate due:soon");
+        assert_eq!(captured.title, "renew the certificate due:soon");
+        assert_eq!(captured.due, None);
+
+        let impossible = parse("renew the certificate due:2026-13-45");
+        assert_eq!(impossible.title, "renew the certificate due:2026-13-45");
+        assert_eq!(impossible.due, None);
+    }
+
+    #[test]
+    fn a_second_owner_stays_in_the_title() {
+        // Same rule as a second project: a strange title beats a lost word.
+        let captured = parse("pair on the migration @max @vernon");
+        assert_eq!(captured.owner.as_deref(), Some("vernon"));
+        assert_eq!(captured.title, "pair on the migration @max");
+    }
+
+    #[test]
+    fn a_line_of_nothing_but_markers_is_kept_as_typed() {
+        let captured = parse("(stm) @vernon due:2026-09-01");
+        assert_eq!(captured.title, "(stm) @vernon due:2026-09-01");
+        assert_eq!(captured.owner, None);
+        assert_eq!(captured.due, None);
+    }
+
+    #[test]
+    fn an_owner_may_be_written_however_the_team_writes_names() {
+        let captured = parse("draft the SOW @Vernon.vd");
+        assert_eq!(captured.owner.as_deref(), Some("Vernon.vd"));
     }
 
     #[test]

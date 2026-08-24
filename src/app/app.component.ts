@@ -92,13 +92,11 @@ export class AppComponent implements OnInit, OnDestroy {
    */
   readonly capturePreview = computed(() => {
     let rest = this.draft().trim();
-    if (!rest.startsWith("(") && !rest.startsWith("[")) {
-      return null;
-    }
     let project: string | null = null;
     const tags: string[] = [];
+
+    // Front of the line: project and tags, exactly as the store reads them.
     for (;;) {
-      // Brackets must match their own kind, as the Rust parser requires.
       const match = /^(?:\(([^\s()[\]]+)\)|\[([^\s()[\]]+)\])\s*/.exec(rest);
       if (!match) {
         break;
@@ -113,11 +111,33 @@ export class AppComponent implements OnInit, OnDestroy {
       }
       rest = rest.slice(match[0].length);
     }
-    // Markers with nothing after them are kept as the title, as the store does.
-    if (!rest || (!project && !tags.length)) {
+
+    // Back of the line: owner and due date, rightmost first.
+    let owner: string | null = null;
+    let due: string | null = null;
+    for (;;) {
+      const trailing = /(?:^|\s)(@([^\s@]+)|due:(\d{4}-\d{2}-\d{2}))$/.exec(rest);
+      if (!trailing) {
+        break;
+      }
+      const isOwner = trailing[2] !== undefined;
+      if ((isOwner && owner) || (!isOwner && due)) {
+        break;
+      }
+      if (isOwner) {
+        owner = trailing[2];
+      } else {
+        due = trailing[3];
+      }
+      rest = rest.slice(0, rest.length - trailing[0].length).trimEnd();
+    }
+
+    const title = rest.trim();
+    // Markers with nothing left over are kept as the title, as the store does.
+    if (!title || (!project && !tags.length && !owner && !due)) {
       return null;
     }
-    return { title: rest, project, tags };
+    return { title, project, tags, owner, due };
   });
 
   /** Today, narrowed to the chosen project. */

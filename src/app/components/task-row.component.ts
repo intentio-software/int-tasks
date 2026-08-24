@@ -40,6 +40,7 @@ import { Task, TodayReason } from "../models/task.models";
           <span class="due" *ngIf="task.due" [class.overdue]="reason === 'overdue'">
             <i class="pi pi-calendar"></i> {{ task.due }}
           </span>
+          <span class="owner" *ngIf="task.assignee" title="Owner">@{{ task.assignee }}</span>
           <span class="tag" *ngFor="let tag of task.tags">{{ tag }}</span>
           <span class="estimate" *ngIf="task.estimate_minutes">{{ task.estimate_minutes }}m</span>
         </div>

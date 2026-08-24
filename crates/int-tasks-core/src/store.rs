@@ -446,7 +446,11 @@ impl Store {
     pub fn capture(&self, input: &str, list_id: Option<&str>) -> Result<Task> {
         let captured = crate::capture::parse(input);
         let task = self.add_task(&captured.title, list_id)?;
-        if captured.project.is_none() && captured.tags.is_empty() {
+        if captured.project.is_none()
+            && captured.tags.is_empty()
+            && captured.owner.is_none()
+            && captured.due.is_none()
+        {
             return Ok(task);
         }
         self.update(|data| {
@@ -456,6 +460,12 @@ impl Store {
             }
             if !captured.tags.is_empty() {
                 stored.tags = captured.tags;
+            }
+            if let Some(owner) = captured.owner {
+                stored.assignee = Some(owner);
+            }
+            if let Some(due) = captured.due {
+                stored.due = Some(due);
             }
             Ok(stored.clone())
         })
@@ -869,6 +879,22 @@ mod tests {
         let stored = store.read().unwrap();
         let found = stored.tasks.iter().find(|t| t.id == task.id).expect("stored");
         assert_eq!(found.project.as_deref(), Some("stm"));
+    }
+
+    #[test]
+    fn capturing_an_owner_and_a_due_date_files_them() {
+        let store = temp_store("capture-owner");
+        let task = store
+            .capture("(stm) [chore] clean up the login page @vernon due:2026-09-01", None)
+            .unwrap();
+        assert_eq!(task.title, "clean up the login page");
+        assert_eq!(task.assignee.as_deref(), Some("vernon"));
+        assert_eq!(task.due.as_deref(), Some("2026-09-01"));
+
+        let stored = store.read().unwrap();
+        let found = stored.tasks.iter().find(|t| t.id == task.id).expect("stored");
+        assert_eq!(found.assignee.as_deref(), Some("vernon"));
+        assert_eq!(found.due.as_deref(), Some("2026-09-01"));
     }
 
     #[test]

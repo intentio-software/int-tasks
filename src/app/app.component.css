@@ -653,3 +653,13 @@ button.ghost:hover {
 .capture-preview .preview-title {
   color: var(--ink-muted);
 }
+
+.capture-preview .chip.owner {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  color: var(--ink-muted);
+}
+
+.capture-preview .chip.due {
+  border-style: dashed;
+  color: var(--ink-muted);
+}

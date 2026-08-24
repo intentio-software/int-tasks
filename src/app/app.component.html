@@ -95,7 +95,7 @@
     <input
       id="capture"
       type="text"
-      placeholder="What needs doing?  (project) [tag] then the task — press Enter."
+      placeholder="What needs doing?  (project) [tag] the task @owner due:2026-09-01"
       autocomplete="off"
       spellcheck="false"
       [ngModel]="draft()"
@@ -112,6 +112,8 @@
       <span class="chip project" *ngIf="preview.project">{{ preview.project }}</span>
       <span class="chip" *ngFor="let tag of preview.tags">{{ tag }}</span>
       <span class="preview-title">{{ preview.title }}</span>
+      <span class="chip owner" *ngIf="preview.owner">@{{ preview.owner }}</span>
+      <span class="chip due" *ngIf="preview.due">due {{ preview.due }}</span>
     </div>
   }
 
