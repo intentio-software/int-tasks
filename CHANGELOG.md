@@ -1,3 +1,10 @@
+# [1.13.0](https://github.com/intentio-software/int-tasks/compare/v1.12.0...v1.13.0) (2026-08-24)
+
+
+### Features
+
+* read [@owner](https://github.com/owner) and due: out of a captured line ([415d276](https://github.com/intentio-software/int-tasks/commit/415d27690af77a4b90fc769220235e6cc72549cf))
+
 # [1.12.0](https://github.com/intentio-software/int-tasks/compare/v1.11.0...v1.12.0) (2026-08-05)
 
 
