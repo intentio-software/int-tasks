@@ -29,6 +29,7 @@ pub mod model;
 pub mod matrix;
 pub mod query;
 pub mod stats;
+pub mod team;
 pub mod store;
 
 pub use capture::{parse as parse_capture, Captured};

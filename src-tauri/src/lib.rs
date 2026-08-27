@@ -4,6 +4,7 @@
 //! uses — so the app and an agent see one store with one set of rules.
 
 pub mod knowledge_bridge;
+mod git_sync;
 mod menu;
 mod timer;
 
@@ -352,6 +353,140 @@ fn delete_session(state: State<'_, AppState>, session_id: String) -> Result<Sess
     state.store.delete_session(&session_id).map_err(fail)
 }
 
+/// One colleague, with enough to answer "how are they doing".
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TeamMember {
+    name: String,
+    is_me: bool,
+    stats: Stats,
+    /// What they are working on today.
+    today: Vec<TodayEntry>,
+    /// Open work someone else handed them.
+    assigned: Vec<Task>,
+    /// Set when their store could not be read, rather than showing them as idle.
+    unavailable: Option<String>,
+}
+
+/// Everyone whose store sits beside this one.
+///
+/// Reading a colleague's store is reading their files, so this only ever reads:
+/// no store is created, seeded or written here.
+#[tauri::command]
+fn team(state: State<'_, AppState>) -> Vec<TeamMember> {
+    let date = today_date();
+    let offset = utc_offset_seconds();
+    int_tasks_core::team::members(state.store.root())
+        .into_iter()
+        .map(|member| {
+            let mut entry = TeamMember {
+                name: member.name.clone(),
+                is_me: member.is_me,
+                stats: Stats::default(),
+                today: Vec::new(),
+                assigned: Vec::new(),
+                unavailable: None,
+            };
+            match int_tasks_core::team::open_member(&member)
+                .and_then(|store| Ok((store.read()?, store.sessions()?)))
+            {
+                Ok((data, sessions)) => {
+                    entry.stats = stats::stats(&data, &sessions, &date, offset, data.settings.daily_focus_goal);
+                    entry.today = query::today(&data, &date);
+                    entry.assigned = int_tasks_core::team::assigned_to(&member, &data.tasks);
+                }
+                Err(err) => entry.unavailable = Some(err.to_string()),
+            }
+            entry
+        })
+        .collect()
+}
+
+/// Where the team repository is: the folder holding everyone's store.
+fn team_root(state: &AppState) -> std::path::PathBuf {
+    state.store.root().parent().map(|p| p.to_path_buf()).unwrap_or_else(|| state.store.root().to_path_buf())
+}
+
+/// How the team folder stands with its remote.
+#[tauri::command]
+fn tasks_sync_status(state: State<'_, AppState>) -> serde_json::Value {
+    let root = team_root(&state);
+    let status = git_sync::status(&root);
+    let config = git_sync::settings();
+    serde_json::json!({
+        "status": status,
+        "settings": config,
+        "root": root.to_string_lossy(),
+    })
+}
+
+/// Sync now: bring colleagues' work in and send yours out.
+#[tauri::command]
+async fn tasks_sync_now(app: AppHandle) -> git_sync::SyncOutcome {
+    let root = {
+        let state = app.state::<AppState>();
+        team_root(&state)
+    };
+    tauri::async_runtime::spawn_blocking(move || git_sync::sync(&root))
+        .await
+        .unwrap_or_else(|err| git_sync::SyncOutcome {
+            changed: false,
+            message: format!("Sync did not run: {err}"),
+            blocked: Some("Sync did not run.".into()),
+        })
+}
+
+/// Turn syncing on or off, and set how often colleagues' work is fetched.
+#[tauri::command]
+fn set_tasks_sync(enabled: bool, interval_seconds: Option<u64>) -> Result<(), String> {
+    let current = git_sync::settings();
+    git_sync::save_settings(&git_sync::SyncSettings {
+        enabled,
+        interval_seconds: interval_seconds.unwrap_or(current.interval_seconds).max(60),
+    })
+    .map_err(|err| err.to_string())
+}
+
+/// Hand a task to a colleague. The line is read exactly as capture reads it.
+#[tauri::command]
+fn assign_to(state: State<'_, AppState>, member: String, line: String) -> Result<Task, String> {
+    let me = state
+        .store
+        .root()
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| "someone".into());
+    let target = int_tasks_core::team::members(state.store.root())
+        .into_iter()
+        .find(|candidate| candidate.name == member)
+        .ok_or_else(|| format!("no team member called {member}"))?;
+    if target.is_me {
+        return Err("that is your own store — capture it normally".into());
+    }
+    int_tasks_core::team::assign(&target, &line, &me).map_err(fail)
+}
+
+/// Where this app's store lives, and whether it was chosen or defaulted.
+#[tauri::command]
+fn store_root(state: State<'_, AppState>) -> serde_json::Value {
+    serde_json::json!({
+        "root": state.store.root().to_string_lossy(),
+        "chosen": Store::root_override().is_some(),
+    })
+}
+
+/// Point the app at a different store folder. Takes effect on restart.
+#[tauri::command]
+fn set_store_root(root: Option<String>) -> Result<(), String> {
+    let path = root.as_deref().map(std::path::Path::new);
+    if let Some(path) = path {
+        if !path.is_dir() {
+            return Err(format!("{} is not a folder", path.display()));
+        }
+    }
+    Store::set_root_override(path).map_err(fail)
+}
+
 #[tauri::command]
 fn store_path(state: State<'_, AppState>) -> String {
     state.store.root().to_string_lossy().to_string()
@@ -370,7 +505,7 @@ fn has_native_menu() -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let root = Store::default_root().expect("a home directory");
+    let root = Store::configured_root().expect("a home directory");
     let store = Store::open(&root).expect("task store");
 
     tauri::Builder::default()
@@ -462,6 +597,11 @@ pub fn run() {
                 .build(app)?;
 
             if let Some(state) = app.try_state::<AppState>() {
+                // Sync the folder holding every store, not just this one.
+                let root = state.store.root().parent().map(|p| p.to_path_buf());
+                if let Some(root) = root {
+                    git_sync::spawn(handle.clone(), root);
+                }
                 timer::init_tray(handle, &state.timer, &Some(tray.clone()));
                 if let Ok(mut slot) = state.tray.lock() {
                     *slot = Some(tray);
@@ -498,6 +638,13 @@ pub fn run() {
             assign_session,
             delete_session,
             store_path,
+            team,
+            assign_to,
+            store_root,
+            set_store_root,
+            tasks_sync_status,
+            tasks_sync_now,
+            set_tasks_sync,
             knowledge_bridge::task_context,
             has_native_menu,
         ])

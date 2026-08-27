@@ -216,6 +216,49 @@ impl Store {
     }
 
     /// The default store location, used when nothing else is configured.
+    /// Where the app should look, honouring an override.
+    ///
+    /// The override is what lets a store live in a shared folder beside a
+    /// colleague's; without it every install is permanently single-user.
+    pub fn configured_root() -> Option<PathBuf> {
+        if let Some(chosen) = Self::root_override() {
+            return Some(chosen);
+        }
+        Self::default_root()
+    }
+
+    /// The store folder chosen by the user, if any.
+    pub fn root_override() -> Option<PathBuf> {
+        if let Some(env) = std::env::var_os("INT_TASKS_DIR") {
+            let path = PathBuf::from(env);
+            if !path.as_os_str().is_empty() {
+                return Some(path);
+            }
+        }
+        let marker = Self::default_root()?.parent()?.join("tasks-root");
+        let text = fs::read_to_string(marker).ok()?;
+        let trimmed = text.trim();
+        (!trimmed.is_empty()).then(|| PathBuf::from(trimmed))
+    }
+
+    /// Record where the store should live. `None` returns to the default.
+    ///
+    /// Kept in a one-line file outside any store, because a store cannot hold
+    /// the location of itself.
+    pub fn set_root_override(root: Option<&Path>) -> Result<()> {
+        let Some(default) = Self::default_root() else { return Ok(()) };
+        let Some(dir) = default.parent().map(Path::to_path_buf) else { return Ok(()) };
+        fs::create_dir_all(&dir)?;
+        let marker = dir.join("tasks-root");
+        match root {
+            Some(path) => fs::write(marker, format!("{}\n", path.display()))?,
+            None => {
+                let _ = fs::remove_file(marker);
+            }
+        }
+        Ok(())
+    }
+
     pub fn default_root() -> Option<PathBuf> {
         std::env::var_os("HOME")
             .or_else(|| std::env::var_os("USERPROFILE"))

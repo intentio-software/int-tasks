@@ -20,7 +20,7 @@ use crate::store::{Data, Settings};
 /// counts for something without pretending it was a triumph.
 const UNSCORED_IMPACT: u32 = 3;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Stats {
     /// Consecutive days, ending today or yesterday, with at least one session.
