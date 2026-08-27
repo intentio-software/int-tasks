@@ -2,6 +2,7 @@ import { Injectable, computed, signal } from "@angular/core";
 import { invoke } from "@tauri-apps/api/core";
 import { UnlistenFn, listen } from "@tauri-apps/api/event";
 
+import { TeamMember } from "../components/team-view.component";
 import { Board, DayProgress, LabelUse, List, Plotted, Session, Settings, Snapshot, Stats, Task, TaskContext, TimeSummary, TimerState, TodayEntry } from "../models/task.models";
 
 /**
@@ -32,6 +33,7 @@ export class TasksService {
   readonly focusSecondsToday = signal(0);
   readonly summary = signal<TimeSummary | null>(null);
   readonly progress = signal<DayProgress[]>([]);
+  readonly team = signal<TeamMember[]>([]);
 
   private unlistenTimer: UnlistenFn | null = null;
 
@@ -235,6 +237,41 @@ export class TasksService {
 
   /** Attribute a recorded session to a task, or to nothing when null. */
   /** Resolve a task's origin into the note or map behind it. */
+  // ---------------------------------------------------------------------------
+  // team
+  // ---------------------------------------------------------------------------
+
+  /** Everyone whose store sits beside ours. Empty when working alone. */
+  async loadTeam(): Promise<void> {
+    try {
+      this.team.set(await invoke<TeamMember[]>("team"));
+    } catch {
+      this.team.set([]);
+    }
+  }
+
+  async assignTo(member: string, line: string): Promise<void> {
+    await this.guard(() => invoke<Task>("assign_to", { member, line }));
+    await this.loadTeam();
+  }
+
+  async syncTasks(): Promise<string | null> {
+    try {
+      const outcome = await invoke<{ changed: boolean; message: string; blocked?: string }>(
+        "tasks_sync_now"
+      );
+      await this.load();
+      await this.loadTeam();
+      return outcome.blocked ?? null;
+    } catch (error) {
+      return String(error);
+    }
+  }
+
+  async chooseStoreRoot(root: string | null): Promise<void> {
+    await this.guard(() => invoke("set_store_root", { root }));
+  }
+
   async taskContext(origin: string): Promise<TaskContext | null> {
     try {
       return await invoke<TaskContext>("task_context", { origin });

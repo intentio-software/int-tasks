@@ -24,6 +24,7 @@ import { TaskAction, TaskMenuComponent } from "./components/task-menu.component"
 import { FlowStatsComponent } from "./components/flow-stats.component";
 import { ProgressTrendComponent } from "./components/progress-trend.component";
 import { SessionLogComponent } from "./components/session-log.component";
+import { TeamViewComponent } from "./components/team-view.component";
 import { WorkingRhythmComponent } from "./components/working-rhythm.component";
 import { TaskRowComponent } from "./components/task-row.component";
 import { List, Plotted, Session, Task, TaskContext } from "./models/task.models";
@@ -31,7 +32,7 @@ import { TasksService } from "./services/tasks.service";
 import { ThemeService } from "./services/theme.service";
 import { UpdaterService } from "./services/updater.service";
 
-type View = "today" | "board" | "matrix" | "flow";
+type View = "today" | "board" | "matrix" | "flow" | "team";
 
 @Component({
   selector: "app-root",
@@ -50,6 +51,7 @@ type View = "today" | "board" | "matrix" | "flow";
     FlowStatsComponent,
     ProgressTrendComponent,
     SessionLogComponent,
+    TeamViewComponent,
     TaskMenuComponent,
     TaskRowComponent,
     WorkingRhythmComponent
@@ -183,6 +185,7 @@ export class AppComponent implements OnInit, OnDestroy {
     void this.loadVersion();
 
     void this.tasks.loadSessions();
+    void this.tasks.loadTeam();
 
     this.finishedUnlisten = await listen("timer-finished", () => {
       void this.tasks.load();
@@ -491,6 +494,12 @@ export class AppComponent implements OnInit, OnDestroy {
       case "view-flow":
         this.view.set("flow");
         break;
+      case "view-team":
+        void this.showTeam();
+        break;
+      case "choose-team-folder":
+        void this.chooseTeamFolder();
+        break;
       case "manage-labels":
         this.labelsOpen.set(true);
         break;
@@ -655,6 +664,59 @@ export class AppComponent implements OnInit, OnDestroy {
 
   async removeSession(sessionId: string): Promise<void> {
     await this.tasks.deleteSession(sessionId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // team
+  // ---------------------------------------------------------------------------
+
+  readonly syncingTasks = signal(false);
+  readonly teamSyncMessage = signal<string | null>(null);
+
+  async showTeam(): Promise<void> {
+    await this.tasks.loadTeam();
+    this.view.set("team");
+  }
+
+  async assignToMember(change: { member: string; line: string }): Promise<void> {
+    await this.tasks.assignTo(change.member, change.line);
+  }
+
+  async syncTeam(): Promise<void> {
+    this.syncingTasks.set(true);
+    try {
+      this.teamSyncMessage.set(await this.tasks.syncTasks());
+    } finally {
+      this.syncingTasks.set(false);
+    }
+  }
+
+  /**
+   * Point the app at a folder inside a shared team repository.
+   *
+   * Takes effect on restart: the store is opened once at launch and handed to
+   * everything, so swapping it underneath a running app would leave half of it
+   * looking at the old one.
+   */
+  async chooseTeamFolder(): Promise<void> {
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const chosen = await open({ directory: true, multiple: false, title: "Choose your folder in the team repository" });
+    if (typeof chosen !== "string") {
+      return;
+    }
+    await this.tasks.chooseStoreRoot(chosen);
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const written = await invoke<string[]>("prepare_team_folder");
+      this.teamSyncMessage.set(
+        written.length
+          ? `Store set to ${chosen}. Added ${written.join(" and ")}. Restart to use it.`
+          : `Store set to ${chosen}. Restart to use it.`
+      );
+    } catch {
+      this.teamSyncMessage.set(`Store set to ${chosen}. Restart to use it.`);
+    }
+    this.view.set("team");
   }
 
 }

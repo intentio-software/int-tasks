@@ -43,6 +43,14 @@
         <button type="button" [class.on]="view() === 'board'" (click)="view.set('board')">Board</button>
         <button type="button" [class.on]="view() === 'matrix'" (click)="view.set('matrix')">Matrix</button>
         <button type="button" [class.on]="view() === 'flow'" (click)="view.set('flow')">Flow</button>
+        <button
+          type="button"
+          *ngIf="tasks.team().length"
+          [class.on]="view() === 'team'"
+          (click)="showTeam()"
+        >
+          Team
+        </button>
       </div>
     </div>
 
@@ -191,6 +199,14 @@
           (menuRequested)="openTaskMenu($event.task, $event.event)"
         ></app-matrix-view>
       </section>
+    } @else if (view() === 'team') {
+      <app-team-view
+        [members]="tasks.team()"
+        [syncing]="syncingTasks()"
+        [syncMessage]="teamSyncMessage()"
+        (assigned)="assignToMember($event)"
+        (syncRequested)="syncTeam()"
+      ></app-team-view>
     } @else if (view() === 'flow') {
       <section class="flow">
         <div class="section-head">
