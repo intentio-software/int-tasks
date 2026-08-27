@@ -1,6 +1,6 @@
 {
   "name": "int-tasks",
-  "version": "1.14.0",
+  "version": "1.15.0",
   "description": "Intentio Tasks — frictionless tasks with a pomodoro timer.",
   "scripts": {
     "ng": "ng",

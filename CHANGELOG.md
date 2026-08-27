@@ -1,3 +1,10 @@
+# [1.15.0](https://github.com/intentio-software/int-tasks/compare/v1.14.0...v1.15.0) (2026-08-27)
+
+
+### Features
+
+* share what moved, not how long anyone sat at a desk ([512e517](https://github.com/intentio-software/int-tasks/commit/512e5178693578027e39b08b14fa82899e654a32))
+
 # [1.14.0](https://github.com/intentio-software/int-tasks/compare/v1.13.0...v1.14.0) (2026-08-27)
 
 
