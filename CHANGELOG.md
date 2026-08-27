@@ -1,3 +1,10 @@
+# [1.16.0](https://github.com/intentio-software/int-tasks/compare/v1.15.0...v1.16.0) (2026-08-27)
+
+
+### Features
+
+* a Team view — see what moved, and hand work over ([a09dd09](https://github.com/intentio-software/int-tasks/commit/a09dd09c83953e219a3d04f5711f53b1223d7047))
+
 # [1.15.0](https://github.com/intentio-software/int-tasks/compare/v1.14.0...v1.15.0) (2026-08-27)
 
 
