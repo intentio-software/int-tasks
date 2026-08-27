@@ -15,6 +15,11 @@
 //! siblings are unrelated folders holding no task log, so nothing is found and
 //! the app stays single-user, which is correct.
 //!
+//! Focus sessions are deliberately not part of what a team shares. The point of
+//! seeing each other's work is encouragement — what moved today — and hours at a
+//! desk measure something else. A team folder should carry `sessions.jsonl` in
+//! its `.gitignore`; `TEAM_GITIGNORE` below is the file to write.
+//!
 //! Everything here is read-only. Another person's store is theirs; the one
 //! exception is assignment, which appends to their log through the ordinary
 //! store API rather than reaching into their files.
@@ -36,6 +41,22 @@ pub struct Member {
     /// Whether this is the store the app itself is using.
     pub is_me: bool,
 }
+
+/// What a team folder's `.gitignore` should contain.
+///
+/// Task logs are shared and merge by appending. Session logs stay on the
+/// machine that recorded them.
+pub const TEAM_GITIGNORE: &str = "\
+# Focus sessions stay on the machine that recorded them. Tasks are shared so
+# the team can see what moved; hours at a desk are nobody else's business.
+sessions.jsonl
+";
+
+/// What a team folder's `.gitattributes` should contain.
+///
+/// Without the union driver Git treats two people appending to a log as a
+/// conflict, when appending is exactly what makes them safe to merge.
+pub const TEAM_GITATTRIBUTES: &str = "*.jsonl merge=union\n";
 
 /// A store folder is one that holds a task log.
 fn is_store(path: &Path) -> bool {

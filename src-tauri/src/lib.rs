@@ -353,17 +353,34 @@ fn delete_session(state: State<'_, AppState>, session_id: String) -> Result<Sess
     state.store.delete_session(&session_id).map_err(fail)
 }
 
-/// One colleague, with enough to answer "how are they doing".
+/// One colleague, with enough to answer "how are they doing" and no more.
+///
+/// Progress is read from tasks — what is open, what got finished — because
+/// finishing work is the thing worth seeing. Focus time and streaks are read
+/// from sessions, which are deliberately not shared: a personal streak
+/// motivates, and the same number on a colleague's screen measures something
+/// else entirely. Only your own row carries them.
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct TeamMember {
     name: String,
     is_me: bool,
-    stats: Stats,
+    /// Open tasks in their store.
+    open: usize,
+    /// Finished today, and what that was worth.
+    completed_today: u32,
+    points_today: u32,
     /// What they are working on today.
     today: Vec<TodayEntry>,
     /// Open work someone else handed them.
     assigned: Vec<Task>,
+    /// The last few things they finished, newest first.
+    ///
+    /// This is the part worth showing other people. Finished work is a fact
+    /// about what moved; hours at a desk is a fact about somebody's afternoon.
+    recently_done: Vec<Task>,
+    /// Streak and focus time. Present only for yourself.
+    stats: Option<Stats>,
     /// Set when their store could not be read, rather than showing them as idle.
     unavailable: Option<String>,
 }
@@ -382,24 +399,70 @@ fn team(state: State<'_, AppState>) -> Vec<TeamMember> {
             let mut entry = TeamMember {
                 name: member.name.clone(),
                 is_me: member.is_me,
-                stats: Stats::default(),
+                open: 0,
+                completed_today: 0,
+                points_today: 0,
+                recently_done: Vec::new(),
                 today: Vec::new(),
                 assigned: Vec::new(),
+                stats: None,
                 unavailable: None,
             };
-            match int_tasks_core::team::open_member(&member)
-                .and_then(|store| Ok((store.read()?, store.sessions()?)))
-            {
+            match int_tasks_core::team::open_member(&member).and_then(|store| {
+                // Sessions are only read for yourself. A colleague's may not
+                // even be on disk, and asking for them would be the wrong
+                // instinct made permanent in code.
+                let sessions = if member.is_me { store.sessions()? } else { Vec::new() };
+                Ok((store.read()?, sessions))
+            }) {
                 Ok((data, sessions)) => {
-                    entry.stats = stats::stats(&data, &sessions, &date, offset, data.settings.daily_focus_goal);
+                    let computed =
+                        stats::stats(&data, &sessions, &date, offset, data.settings.daily_focus_goal);
+                    entry.open = data.tasks.iter().filter(|task| !task.status.is_done()).count();
+                    entry.completed_today = computed.completed_today;
+                    entry.points_today = computed.points_today;
                     entry.today = query::today(&data, &date);
                     entry.assigned = int_tasks_core::team::assigned_to(&member, &data.tasks);
+
+                    let mut done: Vec<Task> = data
+                        .tasks
+                        .iter()
+                        .filter(|task| task.status.is_done() && task.completed_at.is_some())
+                        .cloned()
+                        .collect();
+                    done.sort_by(|a, b| b.completed_at.cmp(&a.completed_at));
+                    done.truncate(5);
+                    entry.recently_done = done;
+                    if member.is_me {
+                        entry.stats = Some(computed);
+                    }
                 }
                 Err(err) => entry.unavailable = Some(err.to_string()),
             }
             entry
         })
         .collect()
+}
+
+/// Write the two files a shared team folder needs, if they are not there.
+///
+/// Offered rather than assumed: it writes into a folder the user chose, and
+/// only ever creates what is missing.
+#[tauri::command]
+fn prepare_team_folder(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let root = team_root(&state);
+    let mut written = Vec::new();
+    for (name, body) in [
+        (".gitignore", int_tasks_core::team::TEAM_GITIGNORE),
+        (".gitattributes", int_tasks_core::team::TEAM_GITATTRIBUTES),
+    ] {
+        let path = root.join(name);
+        if !path.exists() {
+            std::fs::write(&path, body).map_err(|err| err.to_string())?;
+            written.push(name.to_string());
+        }
+    }
+    Ok(written)
 }
 
 /// Where the team repository is: the folder holding everyone's store.
@@ -642,6 +705,7 @@ pub fn run() {
             assign_to,
             store_root,
             set_store_root,
+            prepare_team_folder,
             tasks_sync_status,
             tasks_sync_now,
             set_tasks_sync,
