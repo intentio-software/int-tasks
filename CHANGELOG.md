@@ -1,3 +1,10 @@
+# [1.14.0](https://github.com/intentio-software/int-tasks/compare/v1.13.0...v1.14.0) (2026-08-27)
+
+
+### Features
+
+* see and assign a colleague's tasks, over a shared Git folder ([6af2f88](https://github.com/intentio-software/int-tasks/commit/6af2f88fd58ed62b2d9beb3dc95097f7f1f64260))
+
 # [1.13.0](https://github.com/intentio-software/int-tasks/compare/v1.12.0...v1.13.0) (2026-08-24)
 
 
