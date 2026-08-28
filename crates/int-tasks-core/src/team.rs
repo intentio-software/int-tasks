@@ -133,9 +133,9 @@ pub fn assigned_to(member: &Member, tasks: &[Task]) -> Vec<Task> {
 /// theirs, and guessing at its shape would put work somewhere they never look.
 ///
 /// `from` is recorded so an unexpected task is never mysterious.
-pub fn assign(member: &Member, title: &str, from: &str) -> crate::error::Result<Task> {
+pub fn assign(member: &Member, title: &str, from: &str, today: &str) -> crate::error::Result<Task> {
     let store = open_member(member)?;
-    let task = store.capture(title, None)?;
+    let task = store.capture(title, None, today)?;
     store.update(|data| {
         let stored = data
             .task_mut(&task.id)
@@ -201,7 +201,7 @@ mod tests {
         let theirs = Store::open(root.join("mathew")).unwrap();
 
         let member = Member { name: "mathew".into(), root: root.join("mathew"), is_me: false };
-        let task = assign(&member, "(stm) review the migration plan", "max").unwrap();
+        let task = assign(&member, "(stm) review the migration plan", "max", "2026-08-28").unwrap();
 
         assert_eq!(task.title, "review the migration plan", "the line is read as usual");
         assert_eq!(task.project.as_deref(), Some("stm"));
@@ -220,7 +220,7 @@ mod tests {
         let member = Member { name: "mathew".into(), root: root.join("mathew"), is_me: false };
 
         // Handing something to Mathew that is ultimately for Vernon.
-        let task = assign(&member, "chase the invoice @vernon", "max").unwrap();
+        let task = assign(&member, "chase the invoice @vernon", "max", "2026-08-28").unwrap();
         assert_eq!(task.assignee.as_deref(), Some("vernon"), "the line wins");
         assert_eq!(task.assigned_by.as_deref(), Some("max"));
     }

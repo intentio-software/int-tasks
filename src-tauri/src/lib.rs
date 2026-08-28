@@ -174,10 +174,10 @@ fn add_task(state: State<'_, AppState>, title: String, list_id: Option<String>) 
                 .file_name()
                 .map(|name| name.to_string_lossy().to_string())
                 .unwrap_or_else(|| "someone".into());
-            return int_tasks_core::team::assign(target, &title, &me).map_err(fail);
+            return int_tasks_core::team::assign(target, &title, &me, &today_date()).map_err(fail);
         }
     }
-    state.store.capture(&title, list_id.as_deref()).map_err(fail)
+    state.store.capture(&title, list_id.as_deref(), &today_date()).map_err(fail)
 }
 
 #[tauri::command]
@@ -551,7 +551,7 @@ fn assign_to(state: State<'_, AppState>, member: String, line: String) -> Result
     if target.is_me {
         return Err("that is your own store — capture it normally".into());
     }
-    int_tasks_core::team::assign(&target, &line, &me).map_err(fail)
+    int_tasks_core::team::assign(&target, &line, &me, &today_date()).map_err(fail)
 }
 
 /// Where this app's store lives, and whether it was chosen or defaulted.

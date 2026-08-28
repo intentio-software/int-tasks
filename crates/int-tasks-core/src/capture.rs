@@ -5,12 +5,16 @@
 //! already write by hand is treated as input:
 //!
 //! ```text
-//! (stm) [chore] clean up the front end login page @vernon due:2026-09-01
+//! (stm) [chore] clean up the login page @vernon due:tomorrow i:8 e:3
 //! ```
 //!
-//! becomes the title `clean up the front end login page`, filed under project
-//! `stm`, tagged `chore`, owned by `vernon` and due on 1 September. Every marker
-//! is optional.
+//! becomes the title `clean up the login page`, filed under project `stm`,
+//! tagged `chore`, owned by `vernon`, due tomorrow, impact 8, effort 3. Every
+//! marker is optional.
+//!
+//! Trailing markers are `@owner`, `due:`, `impact:` (or `i:`) and `effort:`
+//! (or `e:`). A due date is `YYYY-MM-DD`, `today`, `tomorrow`, or `+N` for N
+//! days from now. Impact and effort are 1 to 10, matching the matrix.
 //!
 //! Project and tag are read from the front, owner and due date from the back,
 //! which is both how people write them and what keeps prose safe: `email
@@ -29,8 +33,13 @@ pub struct Captured {
     pub tags: Vec<String>,
     /// Who the task is for, from a trailing `@owner`.
     pub owner: Option<String>,
-    /// `YYYY-MM-DD`, from a trailing `due:`.
+    /// A due date as typed: `YYYY-MM-DD`, `today`, `tomorrow` or `+N`.
+    /// Resolve it with [`resolve_due`], which needs to know what day it is.
     pub due: Option<String>,
+    /// How much finishing this is worth, 1-10.
+    pub impact: Option<u8>,
+    /// How much it will cost, 1-10.
+    pub effort: Option<u8>,
 }
 
 /// Split a typed line into a title, a project and type tags.
@@ -67,11 +76,15 @@ pub fn parse(input: &str) -> Captured {
     // Owner and due date are taken off the end, rightmost first.
     let mut owner: Option<String> = None;
     let mut due: Option<String> = None;
+    let mut impact: Option<u8> = None;
+    let mut effort: Option<u8> = None;
     let mut head = body;
     while let Some((trailing, remainder)) = take_trailing(head) {
         match trailing {
             Trailing::Owner(name) if owner.is_none() => owner = Some(name.to_string()),
             Trailing::Due(date) if due.is_none() => due = Some(date.to_string()),
+            Trailing::Impact(value) if impact.is_none() => impact = Some(value),
+            Trailing::Effort(value) if effort.is_none() => effort = Some(value),
             // A second one of either is not a correction; leave it in the title
             // rather than quietly replacing what was already read.
             _ => break,
@@ -90,16 +103,20 @@ pub fn parse(input: &str) -> Captured {
             tags: Vec::new(),
             owner: None,
             due: None,
+            impact: None,
+            effort: None,
         };
     }
 
     tags.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
-    Captured { title, project, tags, owner, due }
+    Captured { title, project, tags, owner, due, impact, effort }
 }
 
 enum Trailing<'a> {
     Owner(&'a str),
     Due(&'a str),
+    Impact(u8),
+    Effort(u8),
 }
 
 /// Take one trailing `@owner` or `due:YYYY-MM-DD`, returning what precedes it.
@@ -120,11 +137,65 @@ fn take_trailing(input: &str) -> Option<(Trailing<'_>, &str)> {
         }
     }
     if let Some(date) = token.strip_prefix("due:") {
-        if crate::dates::civil_days(date).is_some() {
+        if is_due_token(date) {
             return Some((Trailing::Due(date), head));
         }
     }
+    for prefix in ["impact:", "i:"] {
+        if let Some(value) = token.strip_prefix(prefix).and_then(score) {
+            return Some((Trailing::Impact(value), head));
+        }
+    }
+    for prefix in ["effort:", "e:"] {
+        if let Some(value) = token.strip_prefix(prefix).and_then(score) {
+            return Some((Trailing::Effort(value), head));
+        }
+    }
     None
+}
+
+/// A score is 1 to 10. Zero means unscored in the model, and writing `i:0`
+/// almost always means a typo rather than a deliberate nothing.
+fn score(value: &str) -> Option<u8> {
+    match value.parse::<u8>() {
+        Ok(number) if (1..=10).contains(&number) => Some(number),
+        _ => None,
+    }
+}
+
+/// Whether a `due:` value is one we understand. Deliberately strict: a date
+/// we cannot read is left in the title rather than guessed at.
+fn is_due_token(value: &str) -> bool {
+    if crate::dates::civil_days(value).is_some() {
+        return true;
+    }
+    if value.eq_ignore_ascii_case("today") || value.eq_ignore_ascii_case("tomorrow") {
+        return true;
+    }
+    value
+        .strip_prefix('+')
+        .and_then(|days| days.parse::<u16>().ok())
+        .is_some_and(|days| days <= 3_650)
+}
+
+/// Turn a due token into a date, given what day it is.
+///
+/// Kept out of `parse` so that reading a line stays a pure function of the
+/// line — the clock belongs to the caller, which is also the only place that
+/// knows the user's timezone.
+pub fn resolve_due(token: &str, today: &str) -> Option<String> {
+    if crate::dates::civil_days(token).is_some() {
+        return Some(token.to_string());
+    }
+    if token.eq_ignore_ascii_case("today") {
+        return Some(today.to_string());
+    }
+    let days = if token.eq_ignore_ascii_case("tomorrow") {
+        1
+    } else {
+        token.strip_prefix('+')?.parse::<i64>().ok()?
+    };
+    crate::dates::civil_date(crate::dates::civil_days(today)? + days).into()
 }
 
 /// Take one leading `(word)` or `[word]` marker.
@@ -187,6 +258,59 @@ mod tests {
         assert_eq!(dated.title, "review the contract");
         assert_eq!(dated.due.as_deref(), Some("2026-09-01"));
         assert_eq!(dated.owner, None);
+    }
+
+    #[test]
+    fn scores_are_read_long_or_short() {
+        let long = parse("rewrite the importer impact:8 effort:3");
+        assert_eq!(long.title, "rewrite the importer");
+        assert_eq!(long.impact, Some(8));
+        assert_eq!(long.effort, Some(3));
+
+        let short = parse("rewrite the importer i:8 e:3");
+        assert_eq!(short.title, "rewrite the importer");
+        assert_eq!((short.impact, short.effort), (Some(8), Some(3)));
+    }
+
+    #[test]
+    fn the_whole_line_reads_together() {
+        let c = parse("(stm) [chore] clean up the login page @vernon due:tomorrow i:8 e:3");
+        assert_eq!(c.title, "clean up the login page");
+        assert_eq!(c.project.as_deref(), Some("stm"));
+        assert_eq!(c.tags, vec!["chore"]);
+        assert_eq!(c.owner.as_deref(), Some("vernon"));
+        assert_eq!(c.due.as_deref(), Some("tomorrow"));
+        assert_eq!((c.impact, c.effort), (Some(8), Some(3)));
+    }
+
+    #[test]
+    fn a_score_outside_the_scale_is_not_a_score() {
+        // 0 and 11 are typos, not opinions. They stay in the title.
+        for line in ["ship it i:0", "ship it i:11", "ship it e:99", "ship it i:high"] {
+            let c = parse(line);
+            assert_eq!(c.title, line, "{line} should be left alone");
+            assert_eq!((c.impact, c.effort), (None, None));
+        }
+    }
+
+    #[test]
+    fn relative_due_dates_are_accepted_and_resolved_by_the_caller() {
+        assert_eq!(parse("ship it due:today").due.as_deref(), Some("today"));
+        assert_eq!(parse("ship it due:tomorrow").due.as_deref(), Some("tomorrow"));
+        assert_eq!(parse("ship it due:+10").due.as_deref(), Some("+10"));
+
+        assert_eq!(resolve_due("today", "2026-08-28").as_deref(), Some("2026-08-28"));
+        assert_eq!(resolve_due("tomorrow", "2026-08-28").as_deref(), Some("2026-08-29"));
+        assert_eq!(resolve_due("+4", "2026-08-28").as_deref(), Some("2026-09-01"), "crosses the month");
+        assert_eq!(resolve_due("2026-12-25", "2026-08-28").as_deref(), Some("2026-12-25"));
+    }
+
+    #[test]
+    fn a_due_that_is_not_a_date_stays_in_the_title() {
+        for line in ["renew it due:soon", "renew it due:2026-13-45", "renew it due:next-week"] {
+            assert_eq!(parse(line).title, line);
+            assert_eq!(parse(line).due, None);
+        }
     }
 
     #[test]

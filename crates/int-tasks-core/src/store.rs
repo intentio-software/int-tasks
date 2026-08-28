@@ -486,13 +486,20 @@ impl Store {
     /// This is what both the app's capture box and the MCP `add_task` tool go
     /// through, so a line typed by hand and the same line handed to an agent
     /// produce the same task.
-    pub fn capture(&self, input: &str, list_id: Option<&str>) -> Result<Task> {
+    /// Capture a typed line.
+    ///
+    /// `today` is passed in rather than read from a clock here, because
+    /// resolving `due:tomorrow` needs the user's date and only the caller
+    /// knows their timezone.
+    pub fn capture(&self, input: &str, list_id: Option<&str>, today: &str) -> Result<Task> {
         let captured = crate::capture::parse(input);
         let task = self.add_task(&captured.title, list_id)?;
         if captured.project.is_none()
             && captured.tags.is_empty()
             && captured.owner.is_none()
             && captured.due.is_none()
+            && captured.impact.is_none()
+            && captured.effort.is_none()
         {
             return Ok(task);
         }
@@ -508,7 +515,13 @@ impl Store {
                 stored.assignee = Some(owner);
             }
             if let Some(due) = captured.due {
-                stored.due = Some(due);
+                stored.due = crate::capture::resolve_due(&due, today);
+            }
+            if captured.impact.is_some() {
+                stored.impact = captured.impact;
+            }
+            if captured.effort.is_some() {
+                stored.effort = captured.effort;
             }
             Ok(stored.clone())
         })
@@ -913,7 +926,7 @@ mod tests {
     #[test]
     fn capturing_a_typed_line_files_it() {
         let store = temp_store("capture-markers");
-        let task = store.capture("(stm) [chore] clean up the front end login page", None).unwrap();
+        let task = store.capture("(stm) [chore] clean up the front end login page", None, "2026-08-28").unwrap();
         assert_eq!(task.title, "clean up the front end login page");
         assert_eq!(task.project.as_deref(), Some("stm"));
         assert_eq!(task.tags, vec!["chore"]);
@@ -928,7 +941,7 @@ mod tests {
     fn capturing_an_owner_and_a_due_date_files_them() {
         let store = temp_store("capture-owner");
         let task = store
-            .capture("(stm) [chore] clean up the login page @vernon due:2026-09-01", None)
+            .capture("(stm) [chore] clean up the login page @vernon due:2026-09-01", None, "2026-08-28")
             .unwrap();
         assert_eq!(task.title, "clean up the login page");
         assert_eq!(task.assignee.as_deref(), Some("vernon"));
@@ -943,7 +956,7 @@ mod tests {
     #[test]
     fn capturing_a_plain_line_leaves_it_plain() {
         let store = temp_store("capture-plain");
-        let task = store.capture("call the bank", None).unwrap();
+        let task = store.capture("call the bank", None, "2026-08-28").unwrap();
         assert_eq!(task.title, "call the bank");
         assert!(task.project.is_none());
         assert!(task.tags.is_empty());

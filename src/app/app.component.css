@@ -663,3 +663,8 @@ button.ghost:hover {
   border-style: dashed;
   color: var(--ink-muted);
 }
+
+.capture-preview .chip.score {
+  border-style: dotted;
+  color: var(--ink-muted);
+}

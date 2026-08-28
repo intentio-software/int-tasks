@@ -119,29 +119,46 @@ export class AppComponent implements OnInit, OnDestroy {
     // Back of the line: owner and due date, rightmost first.
     let owner: string | null = null;
     let due: string | null = null;
+    let impact: number | null = null;
+    let effort: number | null = null;
+    const score = (raw: string): number | null => {
+      const n = Number(raw);
+      return Number.isInteger(n) && n >= 1 && n <= 10 ? n : null;
+    };
+
     for (;;) {
-      const trailing = /(?:^|\s)(@([^\s@]+)|due:(\d{4}-\d{2}-\d{2}))$/.exec(rest);
+      const trailing =
+        /(?:^|\s)(?:@([^\s@]+)|due:(\d{4}-\d{2}-\d{2}|today|tomorrow|\+\d{1,4})|(?:impact|i):(\d{1,2})|(?:effort|e):(\d{1,2}))$/i.exec(
+          rest
+        );
       if (!trailing) {
         break;
       }
-      const isOwner = trailing[2] !== undefined;
-      if ((isOwner && owner) || (!isOwner && due)) {
-        break;
-      }
-      if (isOwner) {
-        owner = trailing[2];
+      const [whole, who, when, imp, eff] = trailing;
+      if (who !== undefined) {
+        if (owner) break;
+        owner = who;
+      } else if (when !== undefined) {
+        if (due) break;
+        due = when;
+      } else if (imp !== undefined) {
+        const value = score(imp);
+        if (value === null || impact) break;
+        impact = value;
       } else {
-        due = trailing[3];
+        const value = score(eff!);
+        if (value === null || effort) break;
+        effort = value;
       }
-      rest = rest.slice(0, rest.length - trailing[0].length).trimEnd();
+      rest = rest.slice(0, rest.length - whole.length).trimEnd();
     }
 
     const title = rest.trim();
     // Markers with nothing left over are kept as the title, as the store does.
-    if (!title || (!project && !tags.length && !owner && !due)) {
+    if (!title || (!project && !tags.length && !owner && !due && !impact && !effort)) {
       return null;
     }
-    return { title, project, tags, owner, due };
+    return { title, project, tags, owner, due, impact, effort };
   });
 
   /** Today, narrowed to the chosen project. */

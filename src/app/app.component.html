@@ -103,7 +103,7 @@
     <input
       id="capture"
       type="text"
-      placeholder="What needs doing?  (project) [tag] the task @owner due:2026-09-01"
+      placeholder="What needs doing?  (project) [tag] the task @owner due:tomorrow i:8 e:3"
       autocomplete="off"
       spellcheck="false"
       [ngModel]="draft()"
@@ -122,6 +122,8 @@
       <span class="preview-title">{{ preview.title }}</span>
       <span class="chip owner" *ngIf="preview.owner">@{{ preview.owner }}</span>
       <span class="chip due" *ngIf="preview.due">due {{ preview.due }}</span>
+      <span class="chip score" *ngIf="preview.impact">impact {{ preview.impact }}</span>
+      <span class="chip score" *ngIf="preview.effort">effort {{ preview.effort }}</span>
     </div>
   }
 

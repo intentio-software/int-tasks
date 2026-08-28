@@ -21,7 +21,7 @@ fn main() {
     if let Some(target) = std::env::args().nth(2) {
         let line = std::env::args().nth(3).expect("a task line");
         let who = members.iter().find(|m| m.name == target).expect("no such member");
-        let task = int_tasks_core::team::assign(who, &line, "max").unwrap();
+        let task = int_tasks_core::team::assign(who, &line, "max", "2026-08-28").unwrap();
         println!("\nassigned to {}: {} (by {:?})", who.name, task.title, task.assigned_by);
     }
 }

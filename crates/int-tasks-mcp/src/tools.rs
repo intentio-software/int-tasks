@@ -316,7 +316,7 @@ impl ToolProvider for TaskTools {
                     None => None,
                 };
 
-                let task = store.capture(&title, opt_str(args, "list_id").as_deref()).map_err(err)?;
+                let task = store.capture(&title, opt_str(args, "list_id").as_deref(), &self.today()).map_err(err)?;
                 let tags = opt_str_list(args, "tags");
                 let today = opt_bool(args, "today", false);
                 let priority = args.get("priority").and_then(Value::as_u64).map(|p| p as u8);

@@ -9,15 +9,15 @@ fn main() {
         match members.iter().find(|m| !m.is_me && m.name.eq_ignore_ascii_case(&owner)) {
             Some(target) => {
                 println!("routing to {} …", target.name);
-                int_tasks_core::team::assign(target, &line, "max").unwrap()
+                int_tasks_core::team::assign(target, &line, "max", "2026-08-28").unwrap()
             }
             None => {
                 println!("no colleague called {owner}; keeping it here");
-                store.capture(&line, None).unwrap()
+                store.capture(&line, None, "2026-08-28").unwrap()
             }
         }
     } else {
-        store.capture(&line, None).unwrap()
+        store.capture(&line, None, "2026-08-28").unwrap()
     };
     println!("  title    : {}", task.title);
     println!("  assignee : {:?}", task.assignee);
