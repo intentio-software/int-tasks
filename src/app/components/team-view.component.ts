@@ -4,6 +4,20 @@ import { FormsModule } from "@angular/forms";
 
 import { Task, TodayEntry } from "../models/task.models";
 
+export interface TasksSyncState {
+  status: {
+    isRepo: boolean;
+    hasRemote: boolean;
+    branch?: string;
+    dirty: boolean;
+    ahead: number;
+    behind: number;
+    blocked?: string;
+  };
+  settings: { enabled: boolean; intervalSeconds: number };
+  root: string;
+}
+
 export interface TeamMember {
   name: string;
   isMe: boolean;
@@ -43,6 +57,47 @@ export interface TeamMember {
           {{ syncing ? "Syncing…" : "Sync now" }}
         </button>
       </div>
+
+      @if (sync?.status?.isRepo) {
+        <div class="sync-bar">
+          <label class="toggle">
+            <input
+              type="checkbox"
+              [checked]="sync!.settings.enabled"
+              (change)="onToggle($event)"
+            />
+            <span>Keep the team folder in sync</span>
+          </label>
+
+          <label class="interval" [class.dim]="!sync!.settings.enabled">
+            <span>Fetch every</span>
+            <select [disabled]="!sync!.settings.enabled" (change)="onInterval($event)">
+              @for (choice of intervals; track choice.seconds) {
+                <option [value]="choice.seconds" [selected]="choice.seconds === sync!.settings.intervalSeconds">
+                  {{ choice.label }}
+                </option>
+              }
+            </select>
+          </label>
+
+          <span class="detail">
+            {{ sync!.status.branch }}
+            <span *ngIf="sync!.status.ahead"> · {{ sync!.status.ahead }} to push</span>
+            <span *ngIf="sync!.status.behind"> · {{ sync!.status.behind }} to pull</span>
+            <span *ngIf="!sync!.status.hasRemote"> · no remote</span>
+          </span>
+        </div>
+
+        <p class="behaviour">
+          Your own work is committed once you have stopped for a couple of
+          minutes, so a working session becomes one commit rather than twenty.
+        </p>
+      } @else if (sync) {
+        <p class="blocked">
+          {{ sync.root }} is not a Git repository, so there is nothing to sync
+          with. Clone the team repository and point at your folder in it.
+        </p>
+      }
 
       <p class="blocked" *ngIf="syncMessage">{{ syncMessage }}</p>
 
@@ -170,6 +225,46 @@ export interface TeamMember {
       /* Pushes the sync control to the far edge, away from the counts. */
       .head-spacer {
         flex: 1;
+      }
+      .sync-bar {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.9rem;
+        margin-top: 0.5rem;
+        padding: 0.5rem 0.7rem;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--panel);
+        font-size: 0.78rem;
+      }
+      .toggle,
+      .interval {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+      }
+      .interval.dim {
+        opacity: 0.5;
+      }
+      .interval select {
+        padding: 0.12rem 0.3rem;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: var(--surface);
+        color: inherit;
+        font: inherit;
+        font-size: 0.75rem;
+      }
+      .detail {
+        margin-left: auto;
+        color: var(--ink-faint);
+      }
+      .behaviour {
+        margin: 0.4rem 0 0;
+        font-size: 0.72rem;
+        line-height: 1.5;
+        color: var(--ink-faint);
       }
       .blocked {
         margin: 0.4rem 0 0;
@@ -316,11 +411,33 @@ export interface TeamMember {
 })
 export class TeamViewComponent {
   @Input() members: TeamMember[] = [];
+  @Input() sync: TasksSyncState | null = null;
   @Input() syncing = false;
   @Input() syncMessage: string | null = null;
 
   @Output() readonly assigned = new EventEmitter<{ member: string; line: string }>();
   @Output() readonly syncRequested = new EventEmitter<void>();
+  @Output() readonly syncChanged = new EventEmitter<{ enabled: boolean; intervalSeconds?: number }>();
+
+  /** Same choices as Knowledge, for the same reason: one knob worth varying. */
+  readonly intervals = [
+    { seconds: 60, label: "1 minute" },
+    { seconds: 180, label: "3 minutes" },
+    { seconds: 300, label: "5 minutes" },
+    { seconds: 900, label: "15 minutes" },
+    { seconds: 1800, label: "30 minutes" }
+  ];
+
+  onToggle(event: Event): void {
+    this.syncChanged.emit({ enabled: (event.target as HTMLInputElement).checked });
+  }
+
+  onInterval(event: Event): void {
+    const seconds = Number((event.target as HTMLSelectElement).value);
+    if (Number.isFinite(seconds)) {
+      this.syncChanged.emit({ enabled: this.sync?.settings.enabled ?? true, intervalSeconds: seconds });
+    }
+  }
 
   /** One draft per colleague, so switching cards does not lose what was typed. */
   drafts: Record<string, string> = {};

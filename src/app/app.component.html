@@ -202,10 +202,12 @@
     } @else if (view() === 'team') {
       <app-team-view
         [members]="tasks.team()"
+        [sync]="tasks.syncState()"
         [syncing]="syncingTasks()"
         [syncMessage]="teamSyncMessage()"
         (assigned)="assignToMember($event)"
         (syncRequested)="syncTeam()"
+        (syncChanged)="changeSync($event)"
       ></app-team-view>
     } @else if (view() === 'flow') {
       <section class="flow">

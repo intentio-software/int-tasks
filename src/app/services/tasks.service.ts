@@ -2,7 +2,7 @@ import { Injectable, computed, signal } from "@angular/core";
 import { invoke } from "@tauri-apps/api/core";
 import { UnlistenFn, listen } from "@tauri-apps/api/event";
 
-import { TeamMember } from "../components/team-view.component";
+import { TasksSyncState, TeamMember } from "../components/team-view.component";
 import { Board, DayProgress, LabelUse, List, Plotted, Session, Settings, Snapshot, Stats, Task, TaskContext, TimeSummary, TimerState, TodayEntry } from "../models/task.models";
 
 /**
@@ -34,6 +34,7 @@ export class TasksService {
   readonly summary = signal<TimeSummary | null>(null);
   readonly progress = signal<DayProgress[]>([]);
   readonly team = signal<TeamMember[]>([]);
+  readonly syncState = signal<TasksSyncState | null>(null);
 
   private unlistenTimer: UnlistenFn | null = null;
 
@@ -255,6 +256,20 @@ export class TasksService {
     await this.loadTeam();
   }
 
+  /** Where the team folder stands with its remote, and the sync preference. */
+  async loadSyncState(): Promise<void> {
+    try {
+      this.syncState.set(await invoke<TasksSyncState>("tasks_sync_status"));
+    } catch {
+      this.syncState.set(null);
+    }
+  }
+
+  async setSync(enabled: boolean, intervalSeconds?: number): Promise<void> {
+    await invoke("set_tasks_sync", { enabled, intervalSeconds: intervalSeconds ?? null });
+    await this.loadSyncState();
+  }
+
   async syncTasks(): Promise<string | null> {
     try {
       const outcome = await invoke<{ changed: boolean; message: string; blocked?: string }>(
@@ -262,6 +277,7 @@ export class TasksService {
       );
       await this.load();
       await this.loadTeam();
+      await this.loadSyncState();
       return outcome.blocked ?? null;
     } catch (error) {
       return String(error);

@@ -186,6 +186,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
     void this.tasks.loadSessions();
     void this.tasks.loadTeam();
+    void this.tasks.loadSyncState();
 
     this.finishedUnlisten = await listen("timer-finished", () => {
       void this.tasks.load();
@@ -675,7 +676,17 @@ export class AppComponent implements OnInit, OnDestroy {
 
   async showTeam(): Promise<void> {
     await this.tasks.loadTeam();
+    await this.tasks.loadSyncState();
     this.view.set("team");
+  }
+
+  async changeSync(change: { enabled: boolean; intervalSeconds?: number }): Promise<void> {
+    await this.tasks.setSync(change.enabled, change.intervalSeconds);
+    // Turning it on should do something at once; waiting three minutes to find
+    // out whether it works is not reassuring.
+    if (change.enabled && change.intervalSeconds === undefined) {
+      await this.syncTeam();
+    }
   }
 
   async assignToMember(change: { member: string; line: string }): Promise<void> {
