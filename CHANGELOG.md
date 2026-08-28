@@ -1,3 +1,10 @@
+## [1.17.2](https://github.com/intentio-software/int-tasks/compare/v1.17.1...v1.17.2) (2026-08-28)
+
+
+### Bug Fixes
+
+* a focus session starts against nothing until you say otherwise ([948be95](https://github.com/intentio-software/int-tasks/commit/948be95a8430b93a95ddfb55b7c399719b935f80))
+
 ## [1.17.1](https://github.com/intentio-software/int-tasks/compare/v1.17.0...v1.17.1) (2026-08-28)
 
 
