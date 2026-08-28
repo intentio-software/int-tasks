@@ -202,12 +202,8 @@
     } @else if (view() === 'team') {
       <app-team-view
         [members]="tasks.team()"
-        [sync]="tasks.syncState()"
-        [syncing]="syncingTasks()"
         [syncMessage]="teamSyncMessage()"
         (assigned)="assignToMember($event)"
-        (syncRequested)="syncTeam()"
-        (syncChanged)="changeSync($event)"
       ></app-team-view>
     } @else if (view() === 'flow') {
       <section class="flow">
@@ -295,6 +291,17 @@
     <span class="sep">·</span>
     <span class="path" [title]="tasks.storePath()">{{ tasks.storePath() }}</span>
     <span class="error" *ngIf="tasks.error() as error">{{ error }}</span>
+
+    <!-- Only present once there is a team; a store with no siblings has
+         nothing to sync with anyone. -->
+    <app-team-sync-indicator
+      *ngIf="tasks.team().length"
+      [sync]="tasks.syncState()"
+      [syncing]="syncingTasks()"
+      [blocked]="teamSyncBlocked()"
+      (syncRequested)="syncTeam()"
+      (syncChanged)="changeSync($event)"
+    ></app-team-sync-indicator>
   </footer>
 </div>
 

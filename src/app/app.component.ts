@@ -24,6 +24,7 @@ import { TaskAction, TaskMenuComponent } from "./components/task-menu.component"
 import { FlowStatsComponent } from "./components/flow-stats.component";
 import { ProgressTrendComponent } from "./components/progress-trend.component";
 import { SessionLogComponent } from "./components/session-log.component";
+import { TeamSyncIndicatorComponent } from "./components/team-sync-indicator.component";
 import { TeamViewComponent } from "./components/team-view.component";
 import { WorkingRhythmComponent } from "./components/working-rhythm.component";
 import { TaskRowComponent } from "./components/task-row.component";
@@ -51,6 +52,7 @@ type View = "today" | "board" | "matrix" | "flow" | "team";
     FlowStatsComponent,
     ProgressTrendComponent,
     SessionLogComponent,
+    TeamSyncIndicatorComponent,
     TeamViewComponent,
     TaskMenuComponent,
     TaskRowComponent,
@@ -673,6 +675,8 @@ export class AppComponent implements OnInit, OnDestroy {
 
   readonly syncingTasks = signal(false);
   readonly teamSyncMessage = signal<string | null>(null);
+  /** The last reason a sync stopped, shown on the status bar indicator. */
+  readonly teamSyncBlocked = signal<string | null>(null);
 
   async showTeam(): Promise<void> {
     await this.tasks.loadTeam();
@@ -696,7 +700,7 @@ export class AppComponent implements OnInit, OnDestroy {
   async syncTeam(): Promise<void> {
     this.syncingTasks.set(true);
     try {
-      this.teamSyncMessage.set(await this.tasks.syncTasks());
+      this.teamSyncBlocked.set(await this.tasks.syncTasks());
     } finally {
       this.syncingTasks.set(false);
     }
