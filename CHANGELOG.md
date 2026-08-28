@@ -1,3 +1,10 @@
+# [1.18.0](https://github.com/intentio-software/int-tasks/compare/v1.17.2...v1.18.0) (2026-08-28)
+
+
+### Features
+
+* score a task and date it from the capture line ([60acd41](https://github.com/intentio-software/int-tasks/commit/60acd41af54a7b168ce118f17eb3ef486e4be9f5))
+
 ## [1.17.2](https://github.com/intentio-software/int-tasks/compare/v1.17.1...v1.17.2) (2026-08-28)
 
 
