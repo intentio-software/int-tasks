@@ -1,3 +1,10 @@
+## [1.17.1](https://github.com/intentio-software/int-tasks/compare/v1.17.0...v1.17.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* a captured [@colleague](https://github.com/colleague) goes to their list, not yours ([7758118](https://github.com/intentio-software/int-tasks/commit/7758118383b8f65c652b394c52256bb03c840935))
+
 # [1.17.0](https://github.com/intentio-software/int-tasks/compare/v1.16.0...v1.17.0) (2026-08-28)
 
 
