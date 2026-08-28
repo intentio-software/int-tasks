@@ -630,29 +630,18 @@ pub fn run() {
                     let Some(state) = app.try_state::<AppState>() else { return };
                     match event.id().as_ref() {
                         "tray-focus" => {
-                            // Whatever is at the top of Today is very likely what
-                            // the session is for; if Today is empty the session is
-                            // unattributed and will ask when it ends.
-                            let (task_id, task_title) = state
-                                .store
-                                .read()
-                                .ok()
-                                .map(|data| {
-                                    query::today(&data, &today_date())
-                                        .first()
-                                        .map(|entry| {
-                                            (Some(entry.task.id.clone()), Some(entry.task.title.clone()))
-                                        })
-                                        .unwrap_or((None, None))
-                                })
-                                .unwrap_or((None, None));
+                            // Started with no task on purpose. Guessing at the
+                            // top of Today attributes time to work you may not
+                            // be doing, and quietly — the session ends up
+                            // looking deliberate. Unattributed time is asked
+                            // about when it ends, which is when you know.
                             timer::start(
                                 app,
                                 state.timer.clone(),
                                 state.tray(),
                                 state.store.clone(),
-                                task_id,
-                                task_title,
+                                None,
+                                None,
                                 None,
                                 SessionKind::Focus,
                             );

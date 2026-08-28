@@ -509,11 +509,12 @@ export class AppComponent implements OnInit, OnDestroy {
       case "toggle-theme":
         this.theme.cycle();
         break;
-      case "timer-start": {
-        const first = this.tasks.today()[0];
-        await this.tasks.startTimer(first?.id);
+      case "timer-start":
+        // No task: a session started from the menu is not evidence about which
+        // task it is for. It gets asked about when it ends, or attributed
+        // later from the recorded time on Flow.
+        await this.tasks.startTimer();
         break;
-      }
       case "timer-break":
         await this.startBreak();
         break;
