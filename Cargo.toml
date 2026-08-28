@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/int-tasks-core", "crates/int-tasks-mcp", "src-tauri"]
 
 [workspace.package]
-version = "1.16.0"
+version = "1.17.0"
 edition = "2021"
 authors = ["Intentio Software"]
 license = "MIT"

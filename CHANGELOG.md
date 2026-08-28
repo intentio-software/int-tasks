@@ -1,3 +1,10 @@
+# [1.17.0](https://github.com/intentio-software/int-tasks/compare/v1.16.0...v1.17.0) (2026-08-28)
+
+
+### Features
+
+* a switch for the team sync that was already running ([7e1b47b](https://github.com/intentio-software/int-tasks/commit/7e1b47b18a17527c8925c322b0de2b6d89539a78))
+
 # [1.16.0](https://github.com/intentio-software/int-tasks/compare/v1.15.0...v1.16.0) (2026-08-27)
 
 
