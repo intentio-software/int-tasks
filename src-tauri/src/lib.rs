@@ -150,8 +150,33 @@ fn set_hide_completed_after_days(
 }
 
 
+/// Capture a typed line.
+///
+/// A trailing `@name` that matches a colleague files the task in *their* store
+/// rather than recording an owner in ours. Writing `@mathew` plainly means the
+/// task is Mathew's, and a version of this that quietly kept it on your own
+/// board would be reading the line and then ignoring it.
+///
+/// A name that is not a colleague still lands here with the owner recorded:
+/// people get enrolled after the fact, and a typo should not silently vanish
+/// into somebody else's list.
 #[tauri::command]
 fn add_task(state: State<'_, AppState>, title: String, list_id: Option<String>) -> Result<Task, String> {
+    if let Some(owner) = int_tasks_core::capture::parse(&title).owner {
+        let members = int_tasks_core::team::members(state.store.root());
+        if let Some(target) = members
+            .iter()
+            .find(|member| !member.is_me && member.name.eq_ignore_ascii_case(&owner))
+        {
+            let me = state
+                .store
+                .root()
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_else(|| "someone".into());
+            return int_tasks_core::team::assign(target, &title, &me).map_err(fail);
+        }
+    }
     state.store.capture(&title, list_id.as_deref()).map_err(fail)
 }
 
