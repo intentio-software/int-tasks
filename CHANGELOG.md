@@ -1,3 +1,10 @@
+## [1.20.1](https://github.com/intentio-software/int-tasks/compare/v1.20.0...v1.20.1) (2026-09-01)
+
+
+### Bug Fixes
+
+* **mcp:** honour the tasks-root marker so the agent and the app share one store ([6f48f6e](https://github.com/intentio-software/int-tasks/commit/6f48f6edf4eb4512a611bfe493378ca824da1d6d))
+
 # [1.20.0](https://github.com/intentio-software/int-tasks/compare/v1.19.0...v1.20.0) (2026-09-01)
 
 
