@@ -125,6 +125,63 @@ pub fn assigned_to(member: &Member, tasks: &[Task]) -> Vec<Task> {
         .collect()
 }
 
+/// What the whole team did for one client, for reporting rather than watching.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Activity {
+    pub member: String,
+    pub title: String,
+    /// `completed` or `in_progress`.
+    pub state: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<u64>,
+}
+
+/// Everything the team finished or started for a project, newest first.
+///
+/// Deliberately tasks and not sessions: what a client wants to hear is what
+/// moved, and what a colleague is owed is credit for finishing something. How
+/// long anyone sat at a desk is neither.
+///
+/// `since` is a millisecond timestamp; completed work older than it is left
+/// out, so an update can cover the period since the last one.
+pub fn activity(my_root: &Path, project: &str, since: u64) -> Vec<Activity> {
+    let mut found = Vec::new();
+    let people = members(my_root);
+    // Working alone still has activity worth reporting.
+    let people = if people.is_empty() {
+        vec![Member {
+            name: my_root.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+            root: my_root.to_path_buf(),
+            is_me: true,
+        }]
+    } else {
+        people
+    };
+
+    for member in people {
+        let Ok(store) = open_member(&member) else { continue };
+        let Ok(data) = store.read() else { continue };
+        for task in data.tasks {
+            if task.project.as_deref().map(|p| !p.eq_ignore_ascii_case(project)).unwrap_or(true) {
+                continue;
+            }
+            let done = task.status.is_done();
+            if done && task.completed_at.unwrap_or(0) < since {
+                continue;
+            }
+            found.push(Activity {
+                member: member.name.clone(),
+                title: task.title.clone(),
+                state: if done { "completed".into() } else { "in_progress".into() },
+                completed_at: task.completed_at,
+            });
+        }
+    }
+    found.sort_by(|a, b| b.completed_at.cmp(&a.completed_at));
+    found
+}
+
 /// Put a task into a colleague's store.
 ///
 /// The task is appended to their log through the ordinary store API, so it

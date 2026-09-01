@@ -214,6 +214,17 @@ impl ToolProvider for TaskTools {
                 ),
             ),
             Tool::new(
+                "team_activity",
+                "What the whole team finished or is working on for one project, newest first. This is the material for a client update: report what it returns rather than guessing, and say only what you can point at.",
+                Self::object(
+                    json!({
+                        "project": {"type": "string", "description": "Project code as used on tasks, e.g. stm."},
+                        "since_days": {"type": "integer", "description": "How far back to count completed work. Default 14."}
+                    }),
+                    &["project"],
+                ),
+            ),
+            Tool::new(
                 "sessions",
                 "Recorded focus and break sessions, newest first. Use this to review or correct what time was logged against.",
                 Self::object(
@@ -627,6 +638,23 @@ impl ToolProvider for TaskTools {
                 Ok(ToolOutput::json(&json!({
                     "cleared": name.trim(),
                     "tasks_updated": touched,
+                })))
+            }
+
+            "team_activity" => {
+                let project = require_str(args, "project")?;
+                let days = opt_usize(args, "since_days", 14) as i64;
+                let since = int_tasks_core::model::now_millis().saturating_sub((days * 86_400_000) as u64);
+                let found = int_tasks_core::team::activity(store.root(), &project, since);
+                let completed: Vec<&int_tasks_core::team::Activity> =
+                    found.iter().filter(|a| a.state == "completed").collect();
+                let in_progress: Vec<&int_tasks_core::team::Activity> =
+                    found.iter().filter(|a| a.state == "in_progress").collect();
+                Ok(ToolOutput::json(&json!({
+                    "project": project,
+                    "since_days": days,
+                    "completed": completed.iter().map(|a| json!({"who": a.member, "title": a.title})).collect::<Vec<_>>(),
+                    "in_progress": in_progress.iter().map(|a| json!({"who": a.member, "title": a.title})).collect::<Vec<_>>(),
                 })))
             }
 
