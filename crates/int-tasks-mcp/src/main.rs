@@ -23,9 +23,11 @@ USAGE:
     int-tasks-mcp [STORE_DIR]
 
 ARGS:
-    <STORE_DIR>    Folder holding tasks.json and sessions.jsonl.
-                   Defaults to ~/.intentio/tasks, which is where the desktop
-                   app keeps them — so usually you pass nothing at all.
+    <STORE_DIR>    Folder holding tasks.jsonl and sessions.jsonl.
+                   Defaults to wherever the desktop app keeps them: the folder
+                   named in ~/.intentio/tasks-root if the store has been moved
+                   into a shared Git folder, otherwise ~/.intentio/tasks — so
+                   usually you pass nothing at all.
 
 OPTIONS:
     -h, --help     Print this help
@@ -99,9 +101,13 @@ fn parse_args(args: &[String]) -> Result<Option<PathBuf>, String> {
         }
     }
 
+    // `configured_root`, not `default_root`: it honours the `tasks-root` marker
+    // the desktop app writes when the store is moved into a shared Git folder.
+    // Falling back to the default here silently split the agent's tasks from
+    // the app's - written to ~/.intentio/tasks, never synced, never seen.
     let root = root
         .or_else(|| std::env::var_os("INT_TASKS_DIR").map(|value| expand(&value.to_string_lossy())))
-        .or_else(Store::default_root)
+        .or_else(Store::configured_root)
         .ok_or("cannot determine a store folder; pass one explicitly")?;
     Ok(Some(root))
 }
@@ -128,9 +134,10 @@ mod tests {
     #[test]
     fn defaults_to_the_shared_store_when_given_nothing() {
         // The common case: the agent and the app must land on the same folder
-        // without the user configuring anything.
+        // without the user configuring anything - including when the app has
+        // moved the store via the tasks-root marker.
         let root = parse_args(&[]).unwrap().unwrap();
-        assert!(root.ends_with("tasks"), "unexpected default: {}", root.display());
+        assert_eq!(root, Store::configured_root().unwrap(), "agent and app disagree on the store");
     }
 
     #[test]
