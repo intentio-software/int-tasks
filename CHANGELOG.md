@@ -1,3 +1,10 @@
+# [1.20.0](https://github.com/intentio-software/int-tasks/compare/v1.19.0...v1.20.0) (2026-09-01)
+
+
+### Features
+
+* a task can name the project it belongs to ([4126e60](https://github.com/intentio-software/int-tasks/commit/4126e60dcb21a758a683b694e5060537ae413b46))
+
 # [1.19.0](https://github.com/intentio-software/int-tasks/compare/v1.18.0...v1.19.0) (2026-09-01)
 
 
