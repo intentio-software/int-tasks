@@ -1,3 +1,10 @@
+# [1.19.0](https://github.com/intentio-software/int-tasks/compare/v1.18.0...v1.19.0) (2026-09-01)
+
+
+### Features
+
+* ask what the team did for a project ([3b7dffc](https://github.com/intentio-software/int-tasks/commit/3b7dffc7c2d7003608b94209537c6fc87cd6417f))
+
 # [1.18.0](https://github.com/intentio-software/int-tasks/compare/v1.17.2...v1.18.0) (2026-08-28)
 
 
