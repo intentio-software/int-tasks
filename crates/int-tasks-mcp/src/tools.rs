@@ -218,7 +218,7 @@ impl ToolProvider for TaskTools {
                 "What the whole team finished or is working on for one project, newest first. This is the material for a client update: report what it returns rather than guessing, and say only what you can point at.",
                 Self::object(
                     json!({
-                        "project": {"type": "string", "description": "Project code as used on tasks, e.g. stm."},
+                        "project": {"type": "string", "description": "A client designator (e.g. dbc) or an IMS project code (e.g. dfm). Tasks written `(dbc/dfm)` carry both."},
                         "since_days": {"type": "integer", "description": "How far back to count completed work. Default 14."}
                     }),
                     &["project"],
@@ -653,8 +653,8 @@ impl ToolProvider for TaskTools {
                 Ok(ToolOutput::json(&json!({
                     "project": project,
                     "since_days": days,
-                    "completed": completed.iter().map(|a| json!({"who": a.member, "title": a.title})).collect::<Vec<_>>(),
-                    "in_progress": in_progress.iter().map(|a| json!({"who": a.member, "title": a.title})).collect::<Vec<_>>(),
+                    "completed": completed.iter().map(|a| json!({"who": a.member, "title": a.title, "project_code": a.project_code})).collect::<Vec<_>>(),
+                    "in_progress": in_progress.iter().map(|a| json!({"who": a.member, "title": a.title, "project_code": a.project_code})).collect::<Vec<_>>(),
                 })))
             }
 

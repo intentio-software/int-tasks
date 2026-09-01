@@ -131,6 +131,9 @@ pub fn assigned_to(member: &Member, tasks: &[Task]) -> Vec<Task> {
 pub struct Activity {
     pub member: String,
     pub title: String,
+    /// The IMS project code, where the task named one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_code: Option<String>,
     /// `completed` or `in_progress`.
     pub state: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -142,6 +145,10 @@ pub struct Activity {
 /// Deliberately tasks and not sessions: what a client wants to hear is what
 /// moved, and what a colleague is owed is credit for finishing something. How
 /// long anyone sat at a desk is neither.
+///
+/// `project` matches either a client designator or an IMS project code, so
+/// "everything for DBC" and "everything for DFM" are both answerable — the
+/// first is what you ask before the work is split up, the second after.
 ///
 /// `since` is a millisecond timestamp; completed work older than it is left
 /// out, so an update can cover the period since the last one.
@@ -163,7 +170,9 @@ pub fn activity(my_root: &Path, project: &str, since: u64) -> Vec<Activity> {
         let Ok(store) = open_member(&member) else { continue };
         let Ok(data) = store.read() else { continue };
         for task in data.tasks {
-            if task.project.as_deref().map(|p| !p.eq_ignore_ascii_case(project)).unwrap_or(true) {
+            let matches = task.project.as_deref().is_some_and(|p| p.eq_ignore_ascii_case(project))
+                || task.project_code.as_deref().is_some_and(|p| p.eq_ignore_ascii_case(project));
+            if !matches {
                 continue;
             }
             let done = task.status.is_done();
@@ -173,6 +182,7 @@ pub fn activity(my_root: &Path, project: &str, since: u64) -> Vec<Activity> {
             found.push(Activity {
                 member: member.name.clone(),
                 title: task.title.clone(),
+                project_code: task.project_code.clone(),
                 state: if done { "completed".into() } else { "in_progress".into() },
                 completed_at: task.completed_at,
             });

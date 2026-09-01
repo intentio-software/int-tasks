@@ -30,6 +30,8 @@
 pub struct Captured {
     pub title: String,
     pub project: Option<String>,
+    /// The half after the slash in `(client/project)`.
+    pub project_code: Option<String>,
     pub tags: Vec<String>,
     /// Who the task is for, from a trailing `@owner`.
     pub owner: Option<String>,
@@ -100,6 +102,7 @@ pub fn parse(input: &str) -> Captured {
         return Captured {
             title: input.trim().to_string(),
             project: None,
+            project_code: None,
             tags: Vec::new(),
             owner: None,
             due: None,
@@ -108,8 +111,20 @@ pub fn parse(input: &str) -> Captured {
         };
     }
 
+    // `(dbc/dfm)` names a client and a project within it. A bare `(dbc)` is
+    // unchanged, so nothing anyone has already typed means something new.
+    let (project, project_code) = match project {
+        Some(marker) => match marker.split_once('/') {
+            Some((client, code)) if !client.is_empty() && !code.is_empty() => {
+                (Some(client.to_string()), Some(code.to_string()))
+            }
+            _ => (Some(marker), None),
+        },
+        None => (None, None),
+    };
+
     tags.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
-    Captured { title, project, tags, owner, due, impact, effort }
+    Captured { title, project, project_code, tags, owner, due, impact, effort }
 }
 
 enum Trailing<'a> {
@@ -368,6 +383,32 @@ mod tests {
         assert_eq!(title, "clean up the front end login page");
         assert_eq!(project.as_deref(), Some("stm"));
         assert_eq!(tags, vec!["chore"]);
+    }
+
+    #[test]
+    fn a_marker_can_name_a_project_within_a_client() {
+        let c = parse("(dbc/dfm) refactor the letterheads");
+        assert_eq!(c.title, "refactor the letterheads");
+        assert_eq!(c.project.as_deref(), Some("dbc"));
+        assert_eq!(c.project_code.as_deref(), Some("dfm"));
+    }
+
+    #[test]
+    fn a_bare_client_still_means_what_it_did() {
+        // Nothing anyone has already typed may change meaning.
+        let c = parse("(dbc) refactor the letterheads");
+        assert_eq!(c.project.as_deref(), Some("dbc"));
+        assert_eq!(c.project_code, None);
+    }
+
+    #[test]
+    fn a_lopsided_marker_is_left_whole() {
+        // "(dbc/)" and "(/dfm)" are typos, not structure. Splitting them would
+        // invent a client or a project that was never named.
+        for line in ["(dbc/) do the thing", "(/dfm) do the thing"] {
+            let c = parse(line);
+            assert_eq!(c.project_code, None, "{line}");
+        }
     }
 
     #[test]

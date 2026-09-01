@@ -55,10 +55,19 @@ pub struct Task {
     #[serde(default, skip_serializing_if = "is_false")]
     pub today: bool,
 
-    /// The project this belongs to. One per task, so grouping and "show me
-    /// project X" stay unambiguous.
+    /// The client or area this belongs to. One per task, so grouping and
+    /// "show me project X" stay unambiguous.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
+
+    /// The IMS project code, when the task belongs to a named piece of work
+    /// rather than just a client. Written `(dbc/dfm)`: client, then project.
+    ///
+    /// Kept separate from `project` because that one works offline and drives
+    /// the app's own grouping, while this exists to join to a record the app
+    /// cannot see.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_code: Option<String>,
 
     /// Free-form type labels: bug, admin, deep-work.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -133,6 +142,7 @@ impl Task {
             due: None,
             today: false,
             project: None,
+            project_code: None,
             tags: Vec::new(),
             impact: None,
             effort: None,

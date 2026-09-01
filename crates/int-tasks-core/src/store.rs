@@ -495,6 +495,7 @@ impl Store {
         let captured = crate::capture::parse(input);
         let task = self.add_task(&captured.title, list_id)?;
         if captured.project.is_none()
+            && captured.project_code.is_none()
             && captured.tags.is_empty()
             && captured.owner.is_none()
             && captured.due.is_none()
@@ -507,6 +508,9 @@ impl Store {
             let stored = data.task_mut(&task.id).ok_or(TaskError::TaskNotFound(task.id.clone()))?;
             if let Some(project) = captured.project {
                 stored.project = Some(project);
+            }
+            if captured.project_code.is_some() {
+                stored.project_code = captured.project_code;
             }
             if !captured.tags.is_empty() {
                 stored.tags = captured.tags;
