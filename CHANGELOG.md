@@ -1,3 +1,10 @@
+# [1.21.0](https://github.com/intentio-software/int-tasks/compare/v1.20.1...v1.21.0) (2026-09-03)
+
+
+### Features
+
+* show the team's focus for the day, without sharing anyone's log ([91e7283](https://github.com/intentio-software/int-tasks/commit/91e7283e29314e241cc11fb65b3125346c8d90af))
+
 ## [1.20.1](https://github.com/intentio-software/int-tasks/compare/v1.20.0...v1.20.1) (2026-09-01)
 
 
