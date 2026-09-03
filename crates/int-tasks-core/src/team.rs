@@ -42,13 +42,54 @@ pub struct Member {
     pub is_me: bool,
 }
 
+/// A person's focus, as a number rather than a log.
+///
+/// The session log records when somebody sat down — 11:34, 12:49 — which is a
+/// timesheet, and sharing it changes what it measures. A count and a streak say
+/// the encouraging part without the surveillance: enough to notice a colleague
+/// had a good day, not enough to audit their afternoon.
+///
+/// Published by each person's own app into their own folder, so it syncs like
+/// anything else while `sessions.jsonl` stays on the machine that wrote it.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FocusSummary {
+    /// The day these numbers describe, `YYYY-MM-DD`.
+    pub date: String,
+    pub sessions_today: u32,
+    pub focus_minutes_today: u64,
+    pub streak_days: u32,
+    /// When it was last written, so a stale summary can be shown as stale
+    /// rather than as a quiet day.
+    pub updated_at: u64,
+}
+
+pub const FOCUS_FILE: &str = "focus.json";
+
+/// Write your own focus summary where the team can see it.
+pub fn publish_focus(root: &Path, summary: &FocusSummary) -> crate::error::Result<()> {
+    let json = serde_json::to_string_pretty(summary)
+        .map_err(|err| crate::error::TaskError::Corrupt(err.to_string()))?;
+    // Written straight rather than through a temp file: it is a derived
+    // summary, so a torn write is re-created on the next save.
+    std::fs::write(root.join(FOCUS_FILE), format!("{json}\n"))?;
+    Ok(())
+}
+
+/// Read a colleague's published summary, if they have one.
+pub fn read_focus(root: &Path) -> Option<FocusSummary> {
+    let text = std::fs::read_to_string(root.join(FOCUS_FILE)).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
 /// What a team folder's `.gitignore` should contain.
 ///
 /// Task logs are shared and merge by appending. Session logs stay on the
 /// machine that recorded them.
 pub const TEAM_GITIGNORE: &str = "\
-# Focus sessions stay on the machine that recorded them. Tasks are shared so
-# the team can see what moved; hours at a desk are nobody else's business.
+# The session log records when somebody sat down, which is a timesheet. It
+# stays on the machine that wrote it. focus.json — a count and a streak — is
+# published instead, and is shared.
 sessions.jsonl
 ";
 

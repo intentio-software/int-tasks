@@ -27,7 +27,14 @@ export interface TeamMember {
   today: TodayEntry[];
   assigned: Task[];
   recentlyDone: Task[];
-  stats?: { streakDays: number; focusMinutesToday: number } | null;
+  stats?: { streakDays: number; focusMinutesToday: number; sessionsToday: number } | null;
+  focus?: {
+    date: string;
+    sessionsToday: number;
+    focusMinutesToday: number;
+    streakDays: number;
+    updatedAt: number;
+  } | null;
   unavailable?: string;
 }
 
@@ -74,10 +81,17 @@ export interface TeamMember {
                   {{ member.completedToday }} finished today
                 </span>
                 <span class="points" *ngIf="member.pointsToday">+{{ member.pointsToday }}</span>
-                <!-- Only ever your own: a colleague's sessions are not read. -->
-                <span class="mine" *ngIf="member.isMe && member.stats?.streakDays">
-                  · {{ member.stats?.streakDays }} day streak
-                </span>
+                <!-- Yours is computed; theirs is the summary they publish. A
+                     colleague's session log is still never read. -->
+                @if (focusOf(member); as f) {
+                  <span class="focus" [class.stale]="isStale(member)">
+                    · {{ f.sessionsToday }} {{ f.sessionsToday === 1 ? "session" : "sessions" }}
+                    <span *ngIf="f.focusMinutesToday">, {{ focusLabel(f.focusMinutesToday) }}</span>
+                    <span *ngIf="f.streakDays" class="streak">
+                      · {{ f.streakDays }} day streak
+                    </span>
+                  </span>
+                }
               </p>
 
               @if (member.recentlyDone.length) {
@@ -276,8 +290,16 @@ export interface TeamMember {
         margin-left: 0.35rem;
         color: var(--accent);
       }
-      .mine {
+      .focus {
         color: var(--ink-faint);
+      }
+      .focus .streak {
+        color: var(--accent);
+      }
+      /* A summary from an earlier day is not a quiet day; it is an app that
+         has not been open. Say so by fading rather than by showing a zero. */
+      .focus.stale {
+        opacity: 0.5;
       }
       .done {
         list-style: none;
@@ -375,6 +397,26 @@ export class TeamViewComponent {
 
   /** One draft per colleague, so switching cards does not lose what was typed. */
   drafts: Record<string, string> = {};
+
+  /** Your own numbers, or the summary a colleague published. */
+  focusOf(member: TeamMember) {
+    if (member.isMe) {
+      const s = member.stats;
+      return s ? { ...s, date: "", updatedAt: 0 } : null;
+    }
+    return member.focus ?? null;
+  }
+
+  /** True when a colleague's summary describes an earlier day. */
+  isStale(member: TeamMember): boolean {
+    const f = member.focus;
+    return !!f && !!f.date && f.date !== new Date().toISOString().slice(0, 10);
+  }
+
+  focusLabel(minutes: number): string {
+    if (minutes < 60) return `${minutes}m`;
+    return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  }
 
   finishedToday(): number {
     return this.members.reduce((sum, member) => sum + member.completedToday, 0);

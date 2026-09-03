@@ -86,6 +86,20 @@ fn snapshot(state: State<'_, AppState>) -> Result<Snapshot, String> {
     let snapshot_stats =
         stats::stats(&data, &sessions, &date, utc_offset_seconds(), data.settings.daily_focus_goal);
     let summary = query::time_summary(&data, &sessions, None, None);
+
+    // Publish my own focus as a number so the team can see it without anyone
+    // reading anyone's session log. Best effort: failing to write a summary
+    // must never fail a reload.
+    let _ = int_tasks_core::team::publish_focus(
+        state.store.root(),
+        &int_tasks_core::team::FocusSummary {
+            date: date.clone(),
+            sessions_today: snapshot_stats.sessions_today,
+            focus_minutes_today: snapshot_stats.focus_minutes_today,
+            streak_days: snapshot_stats.streak_days,
+            updated_at: int_tasks_core::model::now_millis(),
+        },
+    );
     // Ten working days: enough to see a direction, short enough to read at a glance.
     let progress = stats::recent_progress(&data, &sessions, &date, utc_offset_seconds(), 10);
 
@@ -404,8 +418,11 @@ struct TeamMember {
     /// This is the part worth showing other people. Finished work is a fact
     /// about what moved; hours at a desk is a fact about somebody's afternoon.
     recently_done: Vec<Task>,
-    /// Streak and focus time. Present only for yourself.
+    /// Streak and focus time. Your own is computed; a colleague's comes from
+    /// the summary they publish, never from reading their session log.
     stats: Option<Stats>,
+    /// A colleague's published focus, and how fresh it is.
+    focus: Option<int_tasks_core::team::FocusSummary>,
     /// Set when their store could not be read, rather than showing them as idle.
     unavailable: Option<String>,
 }
@@ -431,6 +448,7 @@ fn team(state: State<'_, AppState>) -> Vec<TeamMember> {
                 today: Vec::new(),
                 assigned: Vec::new(),
                 stats: None,
+                focus: None,
                 unavailable: None,
             };
             match int_tasks_core::team::open_member(&member).and_then(|store| {
@@ -460,6 +478,8 @@ fn team(state: State<'_, AppState>) -> Vec<TeamMember> {
                     entry.recently_done = done;
                     if member.is_me {
                         entry.stats = Some(computed);
+                    } else {
+                        entry.focus = int_tasks_core::team::read_focus(&member.root);
                     }
                 }
                 Err(err) => entry.unavailable = Some(err.to_string()),
