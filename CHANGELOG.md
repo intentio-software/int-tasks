@@ -1,3 +1,10 @@
+# [1.23.0](https://github.com/intentio-software/int-tasks/compare/v1.22.1...v1.23.0) (2026-09-04)
+
+
+### Features
+
+* turn notifications on, and prove they work ([f921499](https://github.com/intentio-software/int-tasks/commit/f9214994a25114a3045e8e6e75e3f1e8ce339f46))
+
 ## [1.22.1](https://github.com/intentio-software/int-tasks/compare/v1.22.0...v1.22.1) (2026-09-04)
 
 
