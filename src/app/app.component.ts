@@ -178,6 +178,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private menuUnlisten: UnlistenFn | null = null;
   private finishedUnlisten: UnlistenFn | null = null;
   private unassignedUnlisten: UnlistenFn | null = null;
+  private tasksSyncUnlisten: UnlistenFn | null = null;
 
   /** Remaining time as `24:31`, for the in-app timer bar. */
   readonly clock = computed(() => {
@@ -206,6 +207,9 @@ export class AppComponent implements OnInit, OnDestroy {
     void this.tasks.loadSessions();
     void this.tasks.loadTeam();
     void this.tasks.loadSyncState();
+    // Work finished while the app was closed is still news the first time it
+    // is opened. Deferred so the window is up before anything appears over it.
+    setTimeout(() => void this.announceCompletions(), 2500);
 
     this.finishedUnlisten = await listen("timer-finished", () => {
       void this.tasks.load();
@@ -214,6 +218,15 @@ export class AppComponent implements OnInit, OnDestroy {
 
     // Rust raises the window before emitting this, so the question arrives on
     // screen rather than behind whatever the user moved on to.
+    // The background sync is how a colleague's work usually arrives — pressing
+    // Sync now is the exception. Without this the notification only ever fired
+    // for someone who happened to sync by hand.
+    this.tasksSyncUnlisten = await listen("tasks-sync", () => {
+      void this.tasks.loadTeam();
+      void this.tasks.loadSyncState();
+      void this.announceCompletions();
+    }).catch(() => null as unknown as UnlistenFn);
+
     this.unassignedUnlisten = await listen<Session>("session-unassigned", (event) => {
       void this.tasks.load();
       void this.tasks.loadSessions();
@@ -229,6 +242,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.menuUnlisten?.();
     this.finishedUnlisten?.();
     this.unassignedUnlisten?.();
+    this.tasksSyncUnlisten?.();
   }
 
   private async loadVersion(): Promise<void> {
