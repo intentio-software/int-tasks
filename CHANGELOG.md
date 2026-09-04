@@ -1,3 +1,10 @@
+## [1.23.1](https://github.com/intentio-software/int-tasks/compare/v1.23.0...v1.23.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* notice a colleague's work when it actually arrives ([22e929e](https://github.com/intentio-software/int-tasks/commit/22e929e52413b110d23647b38ed133c99fa299f6))
+
 # [1.23.0](https://github.com/intentio-software/int-tasks/compare/v1.22.1...v1.23.0) (2026-09-04)
 
 
