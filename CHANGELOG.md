@@ -1,3 +1,10 @@
+# [1.22.0](https://github.com/intentio-software/int-tasks/compare/v1.21.0...v1.22.0) (2026-09-04)
+
+
+### Features
+
+* a notification when a colleague finishes something ([7f08d79](https://github.com/intentio-software/int-tasks/commit/7f08d79b8840909b76956e972daa5272834bc88c))
+
 # [1.21.0](https://github.com/intentio-software/int-tasks/compare/v1.20.1...v1.21.0) (2026-09-03)
 
 
