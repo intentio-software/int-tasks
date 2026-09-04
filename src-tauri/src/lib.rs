@@ -510,6 +510,73 @@ fn prepare_team_folder(state: State<'_, AppState>) -> Result<Vec<String>, String
     Ok(written)
 }
 
+/// Tasks a colleague has finished that this machine has not announced yet.
+///
+/// Kept as a file of ids rather than a timestamp: a task that syncs in late
+/// should still be announced once, and only once. Comparing times would either
+/// miss it or repeat it depending on which clock you trusted.
+fn announced_path() -> Option<std::path::PathBuf> {
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"))?;
+    Some(std::path::PathBuf::from(home).join(".intentio").join("tasks-announced.json"))
+}
+
+fn read_announced() -> std::collections::HashSet<String> {
+    announced_path()
+        .and_then(|path| std::fs::read_to_string(path).ok())
+        .and_then(|text| serde_json::from_str::<Vec<String>>(&text).ok())
+        .map(|ids| ids.into_iter().collect())
+        .unwrap_or_default()
+}
+
+fn write_announced(ids: &std::collections::HashSet<String>) {
+    let Some(path) = announced_path() else { return };
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    // Bounded, newest kept: this only exists to avoid repeating an
+    // announcement, so ancient ids are of no interest.
+    let mut ids: Vec<&String> = ids.iter().collect();
+    ids.sort();
+    let recent: Vec<&&String> = ids.iter().rev().take(500).collect();
+    if let Ok(json) = serde_json::to_string(&recent) {
+        let _ = std::fs::write(path, json);
+    }
+}
+
+/// Newly finished work by other people, and mark it announced.
+///
+/// Deliberately only colleagues: being told about your own tick is noise, and
+/// the first run announces nothing at all — arriving to twenty notifications
+/// because the app had never looked before would be worse than silence.
+#[tauri::command]
+fn colleague_completions(state: State<'_, AppState>) -> Vec<serde_json::Value> {
+    let mut announced = read_announced();
+    let first_run = announced.is_empty();
+    let mut fresh = Vec::new();
+
+    for member in int_tasks_core::team::members(state.store.root()) {
+        if member.is_me {
+            continue;
+        }
+        let Ok(store) = int_tasks_core::team::open_member(&member) else { continue };
+        let Ok(data) = store.read() else { continue };
+        for task in data.tasks.iter().filter(|task| task.status.is_done()) {
+            if !announced.insert(task.id.clone()) || first_run {
+                continue;
+            }
+            fresh.push(serde_json::json!({
+                "who": member.name,
+                "title": task.title,
+                "project": task.project,
+                "mine": task.assigned_by.is_some(),
+            }));
+        }
+    }
+
+    write_announced(&announced);
+    fresh
+}
+
 /// Where the team repository is: the folder holding everyone's store.
 fn team_root(state: &AppState) -> std::path::PathBuf {
     state.store.root().parent().map(|p| p.to_path_buf()).unwrap_or_else(|| state.store.root().to_path_buf())
@@ -736,6 +803,7 @@ pub fn run() {
             delete_session,
             store_path,
             team,
+            colleague_completions,
             assign_to,
             store_root,
             set_store_root,

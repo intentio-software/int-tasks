@@ -715,10 +715,57 @@ export class AppComponent implements OnInit, OnDestroy {
     await this.tasks.assignTo(change.member, change.line);
   }
 
+  /**
+   * Tell me when a colleague finishes something.
+   *
+   * Checked after a sync, because that is when their work actually arrives —
+   * polling on a timer would find nothing between syncs and then everything
+   * at once anyway.
+   */
+  private async announceCompletions(): Promise<void> {
+    try {
+      const { invoke } = await import("@tauri-apps/api/core");
+      const done = await invoke<{ who: string; title: string; mine: boolean }[]>(
+        "colleague_completions"
+      );
+      if (!done.length) {
+        return;
+      }
+      const { isPermissionGranted, requestPermission, sendNotification } = await import(
+        "@tauri-apps/plugin-notification"
+      );
+      let granted = await isPermissionGranted();
+      if (!granted) {
+        granted = (await requestPermission()) === "granted";
+      }
+      if (!granted) {
+        return;
+      }
+
+      // A handful at once is news; twenty is an interruption. Past three, say
+      // how many rather than listing them.
+      for (const task of done.slice(0, 3)) {
+        sendNotification({
+          title: `${task.who} finished something`,
+          body: task.mine ? `${task.title} — you asked for this one` : task.title
+        });
+      }
+      if (done.length > 3) {
+        sendNotification({
+          title: "More finished",
+          body: `${done.length - 3} other tasks were completed. Open the Team tab to see them.`
+        });
+      }
+    } catch {
+      // Notifications are a courtesy. Never fail a sync over one.
+    }
+  }
+
   async syncTeam(): Promise<void> {
     this.syncingTasks.set(true);
     try {
       this.teamSyncBlocked.set(await this.tasks.syncTasks());
+      await this.announceCompletions();
     } finally {
       this.syncingTasks.set(false);
     }
