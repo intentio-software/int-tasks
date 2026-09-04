@@ -1,3 +1,10 @@
+## [1.22.1](https://github.com/intentio-software/int-tasks/compare/v1.22.0...v1.22.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* stop bumping a dependency that was already there ([dfea527](https://github.com/intentio-software/int-tasks/commit/dfea527dba5731461f82c741ee00cd4389bcb60e))
+
 # [1.22.0](https://github.com/intentio-software/int-tasks/compare/v1.21.0...v1.22.0) (2026-09-04)
 
 
