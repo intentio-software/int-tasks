@@ -731,14 +731,13 @@ export class AppComponent implements OnInit, OnDestroy {
       if (!done.length) {
         return;
       }
-      const { isPermissionGranted, requestPermission, sendNotification } = await import(
+      const { isPermissionGranted, sendNotification } = await import(
         "@tauri-apps/plugin-notification"
       );
-      let granted = await isPermissionGranted();
-      if (!granted) {
-        granted = (await requestPermission()) === "granted";
-      }
-      if (!granted) {
+      // Never ask here. A permission prompt makes sense when someone pressed a
+      // button asking for one, not arriving unexplained because a colleague
+      // happened to tick something off. Turning them on lives in the sync panel.
+      if (!(await isPermissionGranted())) {
         return;
       }
 

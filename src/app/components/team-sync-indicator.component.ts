@@ -73,6 +73,20 @@ import { TasksSyncState } from "./team-view.component";
               minutes, so a session becomes one commit rather than a run of them.
             </p>
 
+            <div class="notify">
+              <span class="notify-state" [ngClass]="notifyState()">
+                {{ notifyLabel() }}
+              </span>
+              <button
+                type="button"
+                class="link"
+                *ngIf="notifyState() !== 'blocked'"
+                (click)="testNotification()"
+              >
+                {{ notifyState() === "on" ? "Send a test" : "Turn on" }}
+              </button>
+            </div>
+
             <button type="button" class="now" [disabled]="syncing" (click)="syncRequested.emit()">
               {{ syncing ? "Syncing…" : "Sync now" }}
             </button>
@@ -155,6 +169,37 @@ import { TasksSyncState } from "./team-view.component";
         line-height: 1.5;
         color: var(--ink-faint);
       }
+      .notify {
+        display: flex;
+        align-items: baseline;
+        gap: 0.5rem;
+        margin-top: 0.6rem;
+        padding-top: 0.6rem;
+        border-top: 1px solid var(--border);
+        font-size: 0.75rem;
+      }
+      .notify-state {
+        flex: 1;
+        color: var(--ink-faint);
+      }
+      .notify-state.on {
+        color: var(--accent);
+      }
+      .notify-state.blocked {
+        color: var(--ink-muted);
+      }
+      .link {
+        border: none;
+        background: transparent;
+        color: var(--accent);
+        font: inherit;
+        font-size: 0.75rem;
+        cursor: pointer;
+        padding: 0;
+      }
+      .link:hover {
+        text-decoration: underline;
+      }
       .now {
         margin-top: 0.6rem;
         padding: 0.25rem 0.6rem;
@@ -183,6 +228,8 @@ export class TeamSyncIndicatorComponent {
   @Output() readonly syncChanged = new EventEmitter<{ enabled: boolean; intervalSeconds?: number }>();
 
   readonly open = signal(false);
+  /** unknown until asked, then on, off or blocked by the system. */
+  readonly notify = signal<"unknown" | "on" | "off" | "blocked">("unknown");
   private readonly host = inject(ElementRef<HTMLElement>);
 
   readonly intervals = [
@@ -208,6 +255,75 @@ export class TeamSyncIndicatorComponent {
   @HostListener("document:keydown.escape")
   onEscape(): void {
     this.open.set(false);
+  }
+
+  togglePanel(): void {
+    const opening = !this.open();
+    this.open.set(opening);
+    if (opening) {
+      void this.refreshNotifyState();
+    }
+  }
+
+  notifyState(): string {
+    return this.notify();
+  }
+
+  notifyLabel(): string {
+    switch (this.notify()) {
+      case "on":
+        return "Notifications on";
+      case "blocked":
+        return "Notifications are off in System Settings";
+      case "off":
+        return "Notifications off";
+      default:
+        return "Notifications not set up";
+    }
+  }
+
+  /**
+   * Ask for permission if we do not have it, then prove it works.
+   *
+   * Asking here rather than the first time a colleague finishes something: a
+   * permission prompt makes sense when you pressed a button that asks for one,
+   * and makes no sense arriving out of nowhere on a Tuesday. And a test that
+   * actually appears is the only way to know the setting took.
+   */
+  async testNotification(): Promise<void> {
+    try {
+      const { isPermissionGranted, requestPermission, sendNotification } = await import(
+        "@tauri-apps/plugin-notification"
+      );
+      let granted = await isPermissionGranted();
+      if (!granted) {
+        const answer = await requestPermission();
+        granted = answer === "granted";
+        if (!granted) {
+          // Denied is not the same as never asked: macOS will not ask again,
+          // so say where to change it rather than offering the button forever.
+          this.notify.set(answer === "denied" ? "blocked" : "off");
+          return;
+        }
+      }
+      this.notify.set("on");
+      sendNotification({
+        title: "Intentio Tasks",
+        body: "Notifications are working. You will hear when a colleague finishes something."
+      });
+    } catch {
+      this.notify.set("off");
+    }
+  }
+
+  /** Read the current state without asking for anything. */
+  async refreshNotifyState(): Promise<void> {
+    try {
+      const { isPermissionGranted } = await import("@tauri-apps/plugin-notification");
+      this.notify.set((await isPermissionGranted()) ? "on" : "unknown");
+    } catch {
+      this.notify.set("off");
+    }
   }
 
   blockedReason(): string | null {
