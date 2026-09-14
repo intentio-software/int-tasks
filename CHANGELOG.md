@@ -1,3 +1,10 @@
+# [1.24.0](https://github.com/intentio-software/int-tasks/compare/v1.23.1...v1.24.0) (2026-09-14)
+
+
+### Features
+
+* choose your own session length, and be reminded of a quiet hour ([13a249c](https://github.com/intentio-software/int-tasks/commit/13a249c3e9c8dcdec13a7d1330be07f03bbc9207))
+
 ## [1.23.1](https://github.com/intentio-software/int-tasks/compare/v1.23.0...v1.23.1) (2026-09-04)
 
 
