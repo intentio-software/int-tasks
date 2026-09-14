@@ -57,6 +57,12 @@ export interface Settings {
   workingDays: number[];
   /** Individual non-working dates, `YYYY-MM-DD`. */
   holidays: string[];
+  /** How long a focus session runs. */
+  focusMinutes: number;
+  /** How long a break runs. */
+  breakMinutes: number;
+  /** Minutes of nothing recorded before the app asks. 0 is off. */
+  idleNudgeMinutes: number;
 }
 
 /** A project or tag, with how much work carries it. */

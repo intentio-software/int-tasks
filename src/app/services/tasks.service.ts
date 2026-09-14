@@ -186,6 +186,14 @@ export class TasksService {
     await this.guard(() => invoke("set_hide_completed_after_days", { days }));
   }
 
+  async setSessionLengths(focus: number, brk: number): Promise<void> {
+    await this.guard(() => invoke("set_session_lengths", { focus, brk }));
+  }
+
+  async setIdleNudgeMinutes(minutes: number): Promise<void> {
+    await this.guard(() => invoke("set_idle_nudge_minutes", { minutes }));
+  }
+
   async addBoard(name: string): Promise<Board | null> {
     return this.guard(() => invoke<Board>("add_board", { name }));
   }

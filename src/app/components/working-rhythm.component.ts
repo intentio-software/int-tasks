@@ -48,6 +48,43 @@ import { Settings } from "../models/task.models";
           </div>
 
           <div class="field">
+            <span class="field-label">Focus session</span>
+            <select
+              [ngModel]="settings?.focusMinutes ?? 25"
+              (ngModelChange)="lengthsChanged.emit({ focus: +$event, brk: settings?.breakMinutes ?? 5 })"
+            >
+              @for (n of focusChoices; track n) {
+                <option [value]="n">{{ n }} minutes</option>
+              }
+            </select>
+          </div>
+
+          <div class="field">
+            <span class="field-label">Break</span>
+            <select
+              [ngModel]="settings?.breakMinutes ?? 5"
+              (ngModelChange)="lengthsChanged.emit({ focus: settings?.focusMinutes ?? 25, brk: +$event })"
+            >
+              @for (n of breakChoices; track n) {
+                <option [value]="n">{{ n }} minutes</option>
+              }
+            </select>
+          </div>
+
+          <div class="field">
+            <span class="field-label">Remind me after</span>
+            <select
+              [ngModel]="settings?.idleNudgeMinutes ?? 60"
+              (ngModelChange)="nudgeChanged.emit(+$event)"
+            >
+              <option [value]="0">Never</option>
+              @for (n of nudgeChoices; track n) {
+                <option [value]="n">{{ nudgeLabel(n) }} of quiet</option>
+              }
+            </select>
+          </div>
+
+          <div class="field">
             <span class="field-label">Hide finished work after</span>
             <select
               [ngModel]="settings?.hideCompletedAfterDays ?? 2"
@@ -189,10 +226,25 @@ export class WorkingRhythmComponent {
   @Output() readonly workingDaysChanged = new EventEmitter<number[]>();
   @Output() readonly holidaysChanged = new EventEmitter<string[]>();
   @Output() readonly hideAfterChanged = new EventEmitter<number>();
+  @Output() readonly lengthsChanged = new EventEmitter<{ focus: number; brk: number }>();
+  @Output() readonly nudgeChanged = new EventEmitter<number>();
 
   readonly open = signal(false);
   holidayText = "";
   private current: Settings | null = null;
+
+  /** Round numbers people actually work in, not a spinner to fight with. */
+  readonly focusChoices = [15, 20, 25, 30, 45, 50, 60, 90];
+  readonly breakChoices = [3, 5, 10, 15, 20];
+  readonly nudgeChoices = [30, 45, 60, 90, 120, 180];
+
+  nudgeLabel(minutes: number): string {
+    if (minutes < 60) {
+      return `${minutes} minutes`;
+    }
+    const hours = minutes / 60;
+    return hours === 1 ? "an hour" : `${hours} hours`;
+  }
 
   /** Sunday first, matching the 0-6 the store uses. */
   readonly dayNames = [
@@ -236,6 +288,14 @@ export class WorkingRhythmComponent {
     const holidayNote = holidays
       ? ` ${holidays} public holiday${holidays === 1 ? "" : "s"} also count as time off.`
       : "";
-    return `Streaks and the hiding of finished work count ${worked}.${holidayNote}`;
+    const focus = this.current?.focusMinutes ?? 25;
+    const nudge = this.current?.idleNudgeMinutes ?? 60;
+    const reminder = nudge
+      ? ` After ${this.nudgeLabel(nudge)} with nothing recorded on a working day, it asks.`
+      : "";
+    return (
+      `Focus runs ${focus} minutes. Streaks and the hiding of finished work count ` +
+      `${worked}.${holidayNote}${reminder}`
+    );
   }
 }

@@ -55,6 +55,24 @@ pub struct Settings {
     /// on Friday should still be on screen on Monday morning.
     #[serde(default = "default_working_days")]
     pub working_days: Vec<u8>,
+    /// How long a focus session runs, in minutes.
+    ///
+    /// Twenty-five is the pomodoro number and a fine default, but it is
+    /// somebody else's number: people who work in fifty-minute blocks, or in
+    /// fifteen, should not have to fight the timer to do it.
+    #[serde(default = "default_focus_minutes")]
+    pub focus_minutes: u32,
+    /// How long a break runs, in minutes.
+    #[serde(default = "default_break_minutes")]
+    pub break_minutes: u32,
+    /// Minutes of nothing recorded before the app asks whether you have been
+    /// working. Zero turns it off.
+    ///
+    /// The clock starts at the first thing you record on a working day, not at
+    /// midnight: a reminder at half past seven, before the day has begun, is
+    /// nagging rather than help.
+    #[serde(default = "default_idle_nudge_minutes")]
+    pub idle_nudge_minutes: u32,
     /// Individual dates that are not working days, `YYYY-MM-DD`.
     ///
     /// Kept as a plain list the user maintains rather than a shipped calendar:
@@ -86,6 +104,18 @@ fn default_hide_completed_after_days() -> u32 {
     2
 }
 
+fn default_focus_minutes() -> u32 {
+    25
+}
+
+fn default_break_minutes() -> u32 {
+    5
+}
+
+fn default_idle_nudge_minutes() -> u32 {
+    60
+}
+
 impl Default for Settings {
     fn default() -> Self {
         // Four twenty-five minute sessions is a realistic day of deep work, not
@@ -93,6 +123,9 @@ impl Default for Settings {
         Settings {
             daily_focus_goal: 4,
             hide_completed_after_days: default_hide_completed_after_days(),
+            focus_minutes: default_focus_minutes(),
+            break_minutes: default_break_minutes(),
+            idle_nudge_minutes: default_idle_nudge_minutes(),
             working_days: default_working_days(),
             holidays: Vec::new(),
         }
@@ -817,6 +850,28 @@ impl Store {
         })
     }
 
+    /// Set how long focus and break sessions run.
+    ///
+    /// Clamped to something a person could actually sit through. The ceiling
+    /// is generous rather than opinionated — some people really do work in
+    /// ninety-minute blocks — but a four-digit number is a typo, and a zero
+    /// would end the session the moment it began.
+    pub fn set_session_lengths(&self, focus: u32, brk: u32) -> Result<Settings> {
+        self.update(|data| {
+            data.settings.focus_minutes = focus.clamp(1, 240);
+            data.settings.break_minutes = brk.clamp(1, 120);
+            Ok(data.settings.clone())
+        })
+    }
+
+    /// Set how long a quiet spell runs before the app asks about it. Zero off.
+    pub fn set_idle_nudge_minutes(&self, minutes: u32) -> Result<Settings> {
+        self.update(|data| {
+            data.settings.idle_nudge_minutes = if minutes == 0 { 0 } else { minutes.clamp(15, 480) };
+            Ok(data.settings.clone())
+        })
+    }
+
     // -----------------------------------------------------------------------
     // sessions
     // -----------------------------------------------------------------------
@@ -1300,6 +1355,33 @@ mod tests {
         let store = temp_store("window");
         assert_eq!(store.read().unwrap().settings.hide_completed_after_days, 2);
         assert_eq!(store.set_hide_completed_after_days(7).unwrap().hide_completed_after_days, 7);
+    }
+
+    #[test]
+    fn session_lengths_are_clamped_to_something_a_person_could_sit_through() {
+        let store = temp_store("session-lengths");
+
+        let set = store.set_session_lengths(50, 10).expect("set");
+        assert_eq!((set.focus_minutes, set.break_minutes), (50, 10), "a chosen length is kept");
+
+        // Zero would end the session the instant it began.
+        let zero = store.set_session_lengths(0, 0).expect("set");
+        assert_eq!((zero.focus_minutes, zero.break_minutes), (1, 1));
+
+        // Four digits is a typo, not a working style.
+        let huge = store.set_session_lengths(9999, 9999).expect("set");
+        assert_eq!((huge.focus_minutes, huge.break_minutes), (240, 120));
+    }
+
+    #[test]
+    fn the_reminder_can_be_turned_off_but_not_set_to_nag() {
+        let store = temp_store("idle-nudge");
+
+        assert_eq!(store.set_idle_nudge_minutes(0).expect("set").idle_nudge_minutes, 0, "off");
+        // A five-minute reminder is not a reminder, it is a pest.
+        assert_eq!(store.set_idle_nudge_minutes(5).expect("set").idle_nudge_minutes, 15);
+        assert_eq!(store.set_idle_nudge_minutes(60).expect("set").idle_nudge_minutes, 60);
+        assert_eq!(store.set_idle_nudge_minutes(10_000).expect("set").idle_nudge_minutes, 480);
     }
 
     #[test]

@@ -6,6 +6,7 @@
 pub mod knowledge_bridge;
 mod git_sync;
 mod menu;
+pub mod nudge;
 mod timer;
 
 use std::sync::{Arc, Mutex};
@@ -24,6 +25,7 @@ use timer::{Timer, TimerState};
 pub struct AppState {
     store: Store,
     timer: Arc<Timer>,
+    nudger: Arc<nudge::Nudger>,
     tray: Mutex<Option<TrayIcon>>,
 }
 
@@ -153,6 +155,29 @@ fn set_working_days(state: State<'_, AppState>, days: Vec<u8>) -> Result<(), Str
 #[tauri::command]
 fn set_holidays(state: State<'_, AppState>, holidays: Vec<String>) -> Result<(), String> {
     state.store.set_holidays(holidays).map(|_| ()).map_err(fail)
+}
+
+/// Change how long focus and break sessions run.
+#[tauri::command]
+fn set_session_lengths(
+    state: State<'_, AppState>,
+    focus: u32,
+    brk: u32,
+) -> Result<int_tasks_core::Settings, String> {
+    let settings = state.store.set_session_lengths(focus, brk).map_err(fail)?;
+    // An idle timer should show the new length straight away rather than the
+    // old one until somebody starts a session.
+    state.timer.reset_idle_length(&state.store);
+    Ok(settings)
+}
+
+/// Change how long a quiet spell runs before the app asks about it.
+#[tauri::command]
+fn set_idle_nudge_minutes(
+    state: State<'_, AppState>,
+    minutes: u32,
+) -> Result<int_tasks_core::Settings, String> {
+    state.store.set_idle_nudge_minutes(minutes).map_err(fail)
 }
 
 #[tauri::command]
@@ -687,6 +712,7 @@ pub fn run() {
         .manage(AppState {
             store: store.clone(),
             timer: Arc::new(Timer::default()),
+            nudger: Arc::new(nudge::Nudger::default()),
             tray: Mutex::new(None),
         })
         .plugin(tauri_plugin_dialog::init())
@@ -766,6 +792,12 @@ pub fn run() {
                 if let Some(root) = root {
                     git_sync::spawn(handle.clone(), root);
                 }
+                // Runs in Rust, not the webview: the whole point is to notice
+                // a quiet spell while the window is closed and you are working
+                // in something else.
+                nudge::spawn(handle.clone(), state.store.clone(), state.nudger.clone());
+                // Show the length the user actually set, not the default.
+                state.timer.reset_idle_length(&state.store);
                 timer::init_tray(handle, &state.timer, &Some(tray.clone()));
                 if let Ok(mut slot) = state.tray.lock() {
                     *slot = Some(tray);
@@ -784,6 +816,8 @@ pub fn run() {
             suggest_task,
             set_daily_goal,
             set_hide_completed_after_days,
+            set_session_lengths,
+            set_idle_nudge_minutes,
             set_working_days,
             set_holidays,
             rename_project,

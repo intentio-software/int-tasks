@@ -29,6 +29,26 @@ pub const UNASSIGNED_EVENT: &str = "session-unassigned";
 pub const DEFAULT_FOCUS_MINUTES: u64 = 25;
 pub const DEFAULT_BREAK_MINUTES: u64 = 5;
 
+/// How long a session of this kind should run, as the user has it set.
+///
+/// Clamped rather than trusted: a zero-minute session would finish the instant
+/// it started and write a meaningless record, and a timer measured in days is
+/// a typo rather than an intention.
+fn configured_minutes(store: &Store, kind: SessionKind) -> u64 {
+    let settings = store.read().map(|data| data.settings).unwrap_or_default();
+    let minutes = match kind {
+        SessionKind::Focus => settings.focus_minutes as u64,
+        SessionKind::Break => settings.break_minutes as u64,
+    };
+    if minutes == 0 {
+        return match kind {
+            SessionKind::Focus => DEFAULT_FOCUS_MINUTES,
+            SessionKind::Break => DEFAULT_BREAK_MINUTES,
+        };
+    }
+    minutes.min(8 * 60)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TimerState {
@@ -72,6 +92,22 @@ pub struct Timer {
     /// The shape of the tray menu currently installed, so it is only rebuilt
     /// when it would actually differ — not once a second on every tick.
     menu_mode: AtomicU8,
+}
+
+impl Timer {
+    /// Show the length the user has chosen while the timer is idle.
+    ///
+    /// Without this the tray and the dial read 25:00 until the first session
+    /// starts, which quietly contradicts the setting the user just changed.
+    pub fn reset_idle_length(&self, store: &Store) {
+        let mut state = self.state.lock().expect("timer lock");
+        if state.running {
+            return;
+        }
+        let seconds = configured_minutes(store, SessionKind::Focus) * 60;
+        state.planned_seconds = seconds;
+        state.remaining_seconds = seconds;
+    }
 }
 
 impl Default for Timer {
@@ -219,10 +255,11 @@ pub fn start<R: Runtime>(
         stop(app, timer.clone(), tray.clone(), store.clone(), true);
     }
 
-    let planned = minutes.unwrap_or(match kind {
-        SessionKind::Focus => DEFAULT_FOCUS_MINUTES,
-        SessionKind::Break => DEFAULT_BREAK_MINUTES,
-    }) * 60;
+    // An explicit length wins; otherwise take the one the user set. Falling
+    // back to the constants only when settings cannot be read, because a timer
+    // that silently runs for somebody else's twenty-five minutes is worse than
+    // one that fails loudly.
+    let planned = minutes.unwrap_or_else(|| configured_minutes(&store, kind)) * 60;
 
     let started = {
         let mut state = timer.state.lock().expect("timer lock");

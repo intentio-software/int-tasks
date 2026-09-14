@@ -230,6 +230,8 @@
           (workingDaysChanged)="tasks.setWorkingDays($event)"
           (holidaysChanged)="tasks.setHolidays($event)"
           (hideAfterChanged)="tasks.setHideCompletedAfterDays($event)"
+          (lengthsChanged)="tasks.setSessionLengths($event.focus, $event.brk)"
+          (nudgeChanged)="tasks.setIdleNudgeMinutes($event)"
         ></app-working-rhythm>
       </section>
     } @else {
