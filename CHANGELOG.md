@@ -1,3 +1,10 @@
+# [1.25.0](https://github.com/intentio-software/int-tasks/compare/v1.24.0...v1.25.0) (2026-09-22)
+
+
+### Features
+
+* meetings, and the desk light, both in Tasks ([85469b4](https://github.com/intentio-software/int-tasks/commit/85469b4c6295e78d64d87ced146798dc6f238446))
+
 # [1.24.0](https://github.com/intentio-software/int-tasks/compare/v1.23.1...v1.24.0) (2026-09-14)
 
 

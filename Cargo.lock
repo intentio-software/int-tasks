@@ -1761,7 +1761,7 @@ dependencies = [
 
 [[package]]
 name = "int-tasks"
-version = "1.24.0"
+version = "1.25.0"
 dependencies = [
  "chrono",
  "int-tasks-core",
@@ -1779,7 +1779,7 @@ dependencies = [
 
 [[package]]
 name = "int-tasks-core"
-version = "1.24.0"
+version = "1.25.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1788,7 +1788,7 @@ dependencies = [
 
 [[package]]
 name = "int-tasks-mcp"
-version = "1.24.0"
+version = "1.25.0"
 dependencies = [
  "chrono",
  "int-tasks-core",
