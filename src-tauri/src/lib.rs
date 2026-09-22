@@ -870,6 +870,13 @@ pub fn run() {
                 // The light gets its own menu bar item rather than a corner of
                 // the timer's. The dot is what you glance at to see whether the
                 // thing is actually on, and that is worth its own space.
+                //
+                // macOS only: a tray whose whole content is a text title is a
+                // menu bar idiom. Windows does not support tray titles at all
+                // and Linux hides them without an icon, so elsewhere this would
+                // be an invisible entry doing nothing. The settings panel is
+                // the full interface on those platforms.
+                #[cfg(target_os = "macos")]
                 if let Ok(light_menu) = busylight::tray_menu(handle) {
                     let light_tray = TrayIconBuilder::with_id(busylight::TRAY_ID)
                         .title(busylight::dot_for(&state.light.status()))

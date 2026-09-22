@@ -459,7 +459,6 @@ pub fn push_light_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
 /// So: listen briefly for the banner, and if none comes, ask. PING is answered
 /// with PONG whatever state the firmware is in.
 fn handshake(port: &mut dyn serialport::SerialPort) -> bool {
-    use std::io::Write;
 
     let announced = read_lines_until(port, BOOT_GRACE, |line| {
         line.eq_ignore_ascii_case("READY") || line.starts_with("STATE:")
@@ -485,7 +484,6 @@ fn read_lines_until(
     within: Duration,
     wanted: impl Fn(&str) -> bool,
 ) -> bool {
-    use std::io::Read;
     let deadline = std::time::Instant::now() + within;
     let mut pending = String::new();
     let mut chunk = [0u8; 256];
