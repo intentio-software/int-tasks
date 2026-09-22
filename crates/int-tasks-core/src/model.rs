@@ -241,6 +241,19 @@ pub enum SessionKind {
     #[default]
     Focus,
     Break,
+    /// Time in a meeting: open-ended, and recorded when you say it is over.
+    ///
+    /// A meeting is not focus — it is somebody else's agenda — but it is work,
+    /// and time that vanishes because nothing was counting it is the gap this
+    /// fills.
+    Meeting,
+}
+
+impl SessionKind {
+    /// Whether this kind runs to a planned length rather than until stopped.
+    pub fn counts_down(self) -> bool {
+        !matches!(self, SessionKind::Meeting)
+    }
 }
 
 fn is_false(value: &bool) -> bool {

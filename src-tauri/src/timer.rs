@@ -39,11 +39,14 @@ fn configured_minutes(store: &Store, kind: SessionKind) -> u64 {
     let minutes = match kind {
         SessionKind::Focus => settings.focus_minutes as u64,
         SessionKind::Break => settings.break_minutes as u64,
+        // Open-ended: zero means "no planned length", not "zero minutes".
+        SessionKind::Meeting => return 0,
     };
     if minutes == 0 {
         return match kind {
             SessionKind::Focus => DEFAULT_FOCUS_MINUTES,
             SessionKind::Break => DEFAULT_BREAK_MINUTES,
+            SessionKind::Meeting => 0,
         };
     }
     minutes.min(8 * 60)
@@ -64,9 +67,17 @@ pub struct TimerState {
     pub task_title: Option<String>,
     pub kind: SessionKind,
     pub started_at: u64,
-    /// Length of the session in seconds.
+    /// Length of the session in seconds. Zero for a meeting, which runs until
+    /// somebody says it is over.
     pub planned_seconds: u64,
     pub remaining_seconds: u64,
+    /// Seconds actually worked, not counting time paused.
+    ///
+    /// Counted directly rather than derived from what is left, because a
+    /// meeting has no planned length to subtract from — and because time
+    /// worked is the thing being recorded, so it should be the thing measured.
+    #[serde(default)]
+    pub elapsed_seconds: u64,
 }
 
 impl Default for TimerState {
@@ -80,6 +91,7 @@ impl Default for TimerState {
             started_at: 0,
             planned_seconds: DEFAULT_FOCUS_MINUTES * 60,
             remaining_seconds: DEFAULT_FOCUS_MINUTES * 60,
+            elapsed_seconds: 0,
         }
     }
 }
@@ -153,6 +165,8 @@ fn tray_title(state: &TimerState) -> String {
     let time = match state.kind {
         SessionKind::Focus => clock(state.remaining_seconds),
         SessionKind::Break => format!("☕ {}", clock(state.remaining_seconds)),
+        // Counting up, because there is nothing to count down to.
+        SessionKind::Meeting => format!("👥 {}", clock(state.elapsed_seconds)),
     };
     if state.paused { format!("⏸ {time}") } else { time }
 }
@@ -169,7 +183,8 @@ fn tray_menu<R: Runtime>(app: &AppHandle<R>, state: &TimerState) -> tauri::Resul
     if !state.running {
         let focus = MenuItem::with_id(app, "tray-focus", "Start Focus Session", true, None::<&str>)?;
         let brk = MenuItem::with_id(app, "tray-break", "Start Break", true, None::<&str>)?;
-        return Menu::with_items(app, &[&focus, &brk, &separator, &show]);
+        let meeting = MenuItem::with_id(app, "tray-meeting", "In a Meeting", true, None::<&str>)?;
+        return Menu::with_items(app, &[&focus, &brk, &meeting, &separator, &show]);
     }
 
     let label = state
@@ -179,8 +194,15 @@ fn tray_menu<R: Runtime>(app: &AppHandle<R>, state: &TimerState) -> tauri::Resul
         .unwrap_or_else(|| match state.kind {
             SessionKind::Focus => "Focus session".to_string(),
             SessionKind::Break => "Break".to_string(),
+            SessionKind::Meeting => "Meeting".to_string(),
         });
     let current = MenuItem::with_id(app, "tray-current", label, false, None::<&str>)?;
+    if state.kind == SessionKind::Meeting {
+        // No pause: you are either in the meeting or you are not.
+        let end = MenuItem::with_id(app, "tray-stop", "End Meeting", true, None::<&str>)?;
+        return Menu::with_items(app, &[&current, &end, &separator, &show]);
+    }
+
     let toggle = if state.paused {
         MenuItem::with_id(app, "tray-resume", "Resume", true, None::<&str>)?
     } else {
@@ -190,12 +212,33 @@ fn tray_menu<R: Runtime>(app: &AppHandle<R>, state: &TimerState) -> tauri::Resul
     Menu::with_items(app, &[&current, &separator, &toggle, &stop, &PredefinedMenuItem::separator(app)?, &show])
 }
 
+/// Put the timer's state on the desk light, if it is following.
+///
+/// Only on a change: writing the same word to a serial port every second
+/// would be pointless traffic and would make a genuine failure harder to see.
+fn follow_light<R: Runtime>(app: &AppHandle<R>, state: &TimerState) {
+    let Some(app_state) = app.try_state::<crate::AppState>() else { return };
+    let light = &app_state.light;
+    if !light.settings().follow_timer {
+        return;
+    }
+    let wanted = crate::busylight::mode_for(state.running, state.paused, state.kind);
+    if light.status().mode != Some(wanted) {
+        light.set_mode(wanted);
+        crate::busylight::push_light_tray(app);
+    }
+}
+
 fn push_tray<R: Runtime>(
     app: &AppHandle<R>,
     timer: &Timer,
     tray: &Option<TrayIcon<R>>,
     state: &TimerState,
 ) {
+    // The light follows the same state the tray does, so the two can never
+    // show different answers to "is he busy".
+    follow_light(app, state);
+
     let Some(tray) = tray else { return };
     let _ = tray.set_title(Some(tray_title(state)));
 
@@ -272,6 +315,7 @@ pub fn start<R: Runtime>(
             started_at: now_millis(),
             planned_seconds: planned,
             remaining_seconds: planned,
+            elapsed_seconds: 0,
         };
         state.clone()
     };
@@ -301,8 +345,15 @@ pub fn start<R: Runtime>(
                         // Still the current session, just not counting down.
                         (state.clone(), false)
                     } else {
-                        state.remaining_seconds = state.remaining_seconds.saturating_sub(1);
-                        (state.clone(), state.remaining_seconds == 0)
+                        state.elapsed_seconds = state.elapsed_seconds.saturating_add(1);
+                        if state.kind.counts_down() {
+                            state.remaining_seconds =
+                                state.planned_seconds.saturating_sub(state.elapsed_seconds);
+                        }
+                        // A meeting never finishes on its own; it is over when
+                        // you come back and say so.
+                        let done = state.kind.counts_down() && state.remaining_seconds == 0;
+                        (state.clone(), done)
                     }
                 };
 
@@ -342,7 +393,7 @@ pub fn stop<R: Runtime>(
 
     let mut recorded = None;
     if previous.running && record {
-        let worked = previous.planned_seconds.saturating_sub(previous.remaining_seconds);
+        let worked = previous.elapsed_seconds;
         // Sub-minute stretches are almost always a mis-click, and logging them
         // would clutter the time report without telling anyone anything.
         if worked >= 60 {

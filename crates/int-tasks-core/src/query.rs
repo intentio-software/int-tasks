@@ -249,9 +249,13 @@ pub struct TaskTime {
 /// Breaks are excluded: they are time away from the work, and counting them
 /// would flatter every report.
 pub fn time_summary(data: &Data, sessions: &[Session], from: Option<u64>, to: Option<u64>) -> TimeSummary {
+    // Meetings count here even though they do not count towards streaks or
+    // the daily goal: "where did the time go" is a different question from
+    // "how much deep work did I do", and an afternoon of calls is a real
+    // answer to the first.
     let focus: Vec<&Session> = sessions
         .iter()
-        .filter(|session| session.kind == crate::model::SessionKind::Focus)
+        .filter(|session| session.kind != crate::model::SessionKind::Break)
         .filter(|session| from.map(|from| session.started_at >= from).unwrap_or(true))
         .filter(|session| to.map(|to| session.started_at <= to).unwrap_or(true))
         .collect();

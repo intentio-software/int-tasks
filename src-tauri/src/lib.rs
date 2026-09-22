@@ -6,6 +6,7 @@
 pub mod knowledge_bridge;
 mod git_sync;
 mod menu;
+pub mod busylight;
 pub mod nudge;
 mod timer;
 
@@ -24,6 +25,7 @@ use timer::{Timer, TimerState};
 /// Long-lived app state: the store, the timer, and the tray the timer writes to.
 pub struct AppState {
     store: Store,
+    light: Arc<busylight::Light>,
     timer: Arc<Timer>,
     nudger: Arc<nudge::Nudger>,
     tray: Mutex<Option<TrayIcon>>,
@@ -169,6 +171,29 @@ fn set_session_lengths(
     // old one until somebody starts a session.
     state.timer.reset_idle_length(&state.store);
     Ok(settings)
+}
+
+/// What the desk light is doing.
+#[tauri::command]
+fn light_status(state: State<'_, AppState>) -> busylight::LightStatus {
+    state.light.status()
+}
+
+/// Set the colour by hand, overriding whatever the timer would have chosen.
+#[tauri::command]
+fn set_light_mode(state: State<'_, AppState>, mode: busylight::Mode) -> busylight::LightStatus {
+    state.light.set_mode(mode);
+    state.light.status()
+}
+
+/// Turn the light on or off, choose a port, or stop it following the timer.
+#[tauri::command]
+fn set_light_settings(
+    state: State<'_, AppState>,
+    settings: busylight::LightSettings,
+) -> busylight::LightStatus {
+    state.light.update_settings(settings);
+    state.light.status()
 }
 
 /// Change how long a quiet spell runs before the app asks about it.
@@ -361,6 +386,7 @@ fn start_timer(
     task_id: Option<String>,
     minutes: Option<u64>,
     break_session: Option<bool>,
+    kind: Option<String>,
 ) -> Result<TimerState, String> {
     // Resolve the title now so the tray and UI can name the task without
     // re-reading the store on every tick.
@@ -368,7 +394,15 @@ fn start_timer(
         Some(id) => state.store.read().ok().and_then(|data| data.task(id).map(|t| t.title.clone())),
         None => None,
     };
-    let kind = if break_session.unwrap_or(false) { SessionKind::Break } else { SessionKind::Focus };
+    let kind = match kind.as_deref() {
+        Some("meeting") => SessionKind::Meeting,
+        Some("break") => SessionKind::Break,
+        Some("focus") => SessionKind::Focus,
+        // The older boolean still works, so nothing that already calls this
+        // has to change to gain a third kind.
+        _ if break_session.unwrap_or(false) => SessionKind::Break,
+        _ => SessionKind::Focus,
+    };
     Ok(timer::start(
         &app,
         state.timer.clone(),
@@ -713,6 +747,7 @@ pub fn run() {
             store: store.clone(),
             timer: Arc::new(Timer::default()),
             nudger: Arc::new(nudge::Nudger::default()),
+            light: Arc::new(busylight::Light::default()),
             tray: Mutex::new(None),
         })
         .plugin(tauri_plugin_dialog::init())
@@ -742,6 +777,19 @@ pub fn run() {
                 .on_menu_event(|app, event| {
                     let Some(state) = app.try_state::<AppState>() else { return };
                     match event.id().as_ref() {
+                        "tray-meeting" => {
+                            // No length: a meeting ends when it ends.
+                            timer::start(
+                                app,
+                                state.timer.clone(),
+                                state.tray(),
+                                state.store.clone(),
+                                None,
+                                None,
+                                None,
+                                SessionKind::Meeting,
+                            );
+                        }
                         "tray-focus" => {
                             // Started with no task on purpose. Guessing at the
                             // top of Today attributes time to work you may not
@@ -796,6 +844,25 @@ pub fn run() {
                 // a quiet spell while the window is closed and you are working
                 // in something else.
                 nudge::spawn(handle.clone(), state.store.clone(), state.nudger.clone());
+                busylight::supervise(state.light.clone());
+
+                // The light gets its own menu bar item rather than a corner of
+                // the timer's. The dot is what you glance at to see whether the
+                // thing is actually on, and that is worth its own space.
+                if let Ok(light_menu) = busylight::tray_menu(handle) {
+                    let light_tray = TrayIconBuilder::with_id(busylight::TRAY_ID)
+                        .title(busylight::dot_for(&state.light.status()))
+                        .tooltip("Busylight")
+                        .menu(&light_menu)
+                        .on_menu_event(|app, event| {
+                            busylight::handle_menu(app, event.id().as_ref());
+                        })
+                        .build(app);
+                    if light_tray.is_err() {
+                        // A missing light must never stop the app starting.
+                        eprintln!("[tasks] could not create the busylight tray");
+                    }
+                }
                 // Show the length the user actually set, not the default.
                 state.timer.reset_idle_length(&state.store);
                 timer::init_tray(handle, &state.timer, &Some(tray.clone()));
@@ -818,6 +885,9 @@ pub fn run() {
             set_hide_completed_after_days,
             set_session_lengths,
             set_idle_nudge_minutes,
+            light_status,
+            set_light_mode,
+            set_light_settings,
             set_working_days,
             set_holidays,
             rename_project,
