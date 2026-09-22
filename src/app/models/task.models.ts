@@ -5,7 +5,7 @@
  */
 
 export type Status = "todo" | "doing" | "done";
-export type SessionKind = "focus" | "break";
+export type SessionKind = "focus" | "break" | "meeting";
 export type TodayReason = "overdue" | "due" | "flagged" | "inprogress";
 
 export interface Task {
@@ -133,6 +133,21 @@ export interface TimerState {
   startedAt: number;
   plannedSeconds: number;
   remainingSeconds: number;
+  /** Time actually worked. The only figure a meeting has, since it counts up. */
+  elapsedSeconds: number;
+}
+
+export type LightMode = "busy" | "available" | "ringing" | "offline" | "off";
+
+/** What the desk light is doing. */
+export interface LightStatus {
+  enabled: boolean;
+  connected: boolean;
+  port?: string | null;
+  mode?: LightMode | null;
+  message: string;
+  followTimer: boolean;
+  ports: string[];
 }
 
 /** One working day on the Flow trend. */

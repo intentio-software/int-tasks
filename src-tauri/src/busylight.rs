@@ -86,6 +86,8 @@ impl Mode {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LightStatus {
+    /// Whether the user has switched the light on at all.
+    pub enabled: bool,
     pub connected: bool,
     /// The port in use, or the one being looked for.
     pub port: Option<String>,
@@ -152,6 +154,7 @@ impl Light {
     pub fn status(&self) -> LightStatus {
         let settings = self.settings.lock().expect("light settings");
         LightStatus {
+            enabled: settings.enabled,
             connected: self.connected.load(Ordering::Relaxed),
             port: settings.port.clone(),
             mode: *self.wanted.lock().expect("light mode"),
@@ -288,7 +291,7 @@ fn looks_like_a_device(name: &str) -> bool {
 }
 
 /// Keep the connection alive, for as long as the app runs.
-pub fn supervise(light: Arc<Light>) {
+pub fn supervise<R: tauri::Runtime>(app: tauri::AppHandle<R>, light: Arc<Light>) {
     if light.supervising.swap(true, Ordering::SeqCst) {
         return;
     }
@@ -308,7 +311,24 @@ pub fn supervise(light: Arc<Light>) {
         if !light.connect(settings.port.as_deref()) && settings.port.is_some() {
             light.connect(None);
         }
+        // Only say so when it actually found something: a failed sweep every
+        // three seconds is not news.
+        if light.connected.load(Ordering::Relaxed) {
+            announce(&app);
+        }
     });
+}
+
+/// Emitted whenever the light's status changes, so a settings panel can show
+/// the truth without polling for it.
+pub const LIGHT_EVENT: &str = "busylight";
+
+/// Tell the window and the menu bar that something changed.
+pub fn announce<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    use tauri::{Emitter, Manager};
+    let Some(state) = app.try_state::<crate::AppState>() else { return };
+    let _ = app.emit(LIGHT_EVENT, state.light.status());
+    push_light_tray(app);
 }
 
 /// The id of the light's own menu bar item.
@@ -409,7 +429,7 @@ pub fn handle_menu<R: tauri::Runtime>(app: &tauri::AppHandle<R>, id: &str) -> bo
         }
     }
 
-    push_light_tray(app);
+    announce(app);
     if let Ok(menu) = tray_menu(app) {
         if let Some(tray) = app.tray_by_id(TRAY_ID) {
             let _ = tray.set_menu(Some(menu));
@@ -568,6 +588,7 @@ mod tests {
     #[test]
     fn a_disconnected_light_shows_that_it_is_disconnected() {
         let status = LightStatus {
+            enabled: true,
             connected: false,
             port: None,
             mode: Some(Mode::Busy),
@@ -595,6 +616,51 @@ mod tests {
                 looks_like_a_device(&port),
                 "{port} is not a USB serial device and should not be probed"
             );
+        }
+    }
+
+    #[test]
+    fn the_settings_the_panel_sends_are_understood() {
+        // Exactly what the Angular service puts on the wire, including the
+        // null it sends for "find it automatically".
+        let sent = r#"{"enabled":true,"port":null,"followTimer":false}"#;
+        let settings: LightSettings = serde_json::from_str(sent).expect("settings");
+        assert!(settings.enabled);
+        assert_eq!(settings.port, None);
+        assert!(!settings.follow_timer, "camelCase followTimer must map to follow_timer");
+
+        let chosen = r#"{"enabled":true,"port":"/dev/cu.usbmodem1201","followTimer":true}"#;
+        let settings: LightSettings = serde_json::from_str(chosen).expect("settings");
+        assert_eq!(settings.port.as_deref(), Some("/dev/cu.usbmodem1201"));
+    }
+
+    #[test]
+    fn the_colours_the_panel_sends_are_understood() {
+        for (sent, want) in [
+            ("\"busy\"", Mode::Busy),
+            ("\"available\"", Mode::Available),
+            ("\"ringing\"", Mode::Ringing),
+            ("\"offline\"", Mode::Offline),
+            ("\"off\"", Mode::Off),
+        ] {
+            assert_eq!(serde_json::from_str::<Mode>(sent).expect(sent), want);
+        }
+    }
+
+    #[test]
+    fn the_status_the_panel_reads_carries_what_it_needs() {
+        let status = LightStatus {
+            enabled: true,
+            connected: true,
+            port: Some("/dev/cu.usbmodem1201".into()),
+            mode: Some(Mode::Busy),
+            message: "Connected".into(),
+            follow_timer: true,
+            ports: vec!["/dev/cu.usbmodem1201".into()],
+        };
+        let json = serde_json::to_string(&status).expect("status");
+        for key in ["\"enabled\"", "\"connected\"", "\"followTimer\"", "\"ports\"", "\"busy\""] {
+            assert!(json.contains(key), "{key} missing from {json}");
         }
     }
 

@@ -26,9 +26,10 @@ import { ProgressTrendComponent } from "./components/progress-trend.component";
 import { SessionLogComponent } from "./components/session-log.component";
 import { TeamSyncIndicatorComponent } from "./components/team-sync-indicator.component";
 import { TeamViewComponent } from "./components/team-view.component";
+import { DeskLightComponent } from "./components/desk-light.component";
 import { WorkingRhythmComponent } from "./components/working-rhythm.component";
 import { TaskRowComponent } from "./components/task-row.component";
-import { List, Plotted, Session, Task, TaskContext } from "./models/task.models";
+import { List, Plotted, Session, SessionKind, Task, TaskContext } from "./models/task.models";
 import { TasksService } from "./services/tasks.service";
 import { ThemeService } from "./services/theme.service";
 import { UpdaterService } from "./services/updater.service";
@@ -56,7 +57,8 @@ type View = "today" | "board" | "matrix" | "flow" | "team";
     TeamViewComponent,
     TaskMenuComponent,
     TaskRowComponent,
-    WorkingRhythmComponent
+    WorkingRhythmComponent,
+    DeskLightComponent
   ],
   templateUrl: "./app.component.html",
   styleUrls: ["./app.component.css"]
@@ -180,15 +182,39 @@ export class AppComponent implements OnInit, OnDestroy {
   private unassignedUnlisten: UnlistenFn | null = null;
   private tasksSyncUnlisten: UnlistenFn | null = null;
 
-  /** Remaining time as `24:31`, for the in-app timer bar. */
+  /** The time on the in-app timer bar, as `24:31`.
+   *
+   * A meeting counts up, because there is nothing to count down to — so it
+   * shows how long you have been in it rather than a countdown stuck at zero.
+   */
   readonly clock = computed(() => {
     const timer = this.tasks.timer();
     if (!timer) {
       return "";
     }
-    const seconds = timer.remainingSeconds;
+    const seconds =
+      timer.kind === "meeting" ? timer.elapsedSeconds : timer.remainingSeconds;
     return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
   });
+
+  timerIcon(kind: SessionKind): string {
+    if (kind === "break") {
+      return "pi-pause-circle";
+    }
+    return kind === "meeting" ? "pi-users" : "pi-play-circle";
+  }
+
+  timerLabel(kind: SessionKind): string {
+    if (kind === "break") {
+      return "Break";
+    }
+    return kind === "meeting" ? "In a meeting" : "Focus";
+  }
+
+  /** Start an open-ended meeting from the window. */
+  async startMeeting(): Promise<void> {
+    await this.tasks.startTimer(undefined, undefined, false, "meeting");
+  }
 
   readonly focusToday = computed(() => {
     const minutes = Math.round(this.tasks.focusSecondsToday() / 60);

@@ -129,12 +129,23 @@
 
   @if (tasks.timer(); as timer) {
     @if (timer.running) {
-      <div class="timer-bar" [class.break]="timer.kind === 'break'">
-        <i class="pi" [ngClass]="timer.kind === 'break' ? 'pi-pause-circle' : 'pi-play-circle'"></i>
+      <div
+        class="timer-bar"
+        [class.break]="timer.kind === 'break'"
+        [class.meeting]="timer.kind === 'meeting'"
+      >
+        <i class="pi" [ngClass]="timerIcon(timer.kind)"></i>
         <span class="clock">{{ clock() }}</span>
-        <span class="on-task">{{ timer.taskTitle || (timer.kind === 'break' ? 'Break' : 'Focus') }}</span>
-        <button type="button" (click)="toggleTimerPause()">{{ timer.paused ? 'Resume' : 'Pause' }}</button>
-        <button type="button" (click)="stopTimer()">Stop</button>
+        <span class="on-task">{{ timer.taskTitle || timerLabel(timer.kind) }}</span>
+        <!-- A meeting cannot be paused: you are in it or you are not. -->
+        @if (timer.kind !== 'meeting') {
+          <button type="button" (click)="toggleTimerPause()">
+            {{ timer.paused ? 'Resume' : 'Pause' }}
+          </button>
+        }
+        <button type="button" (click)="stopTimer()">
+          {{ timer.kind === 'meeting' ? 'End meeting' : 'Stop' }}
+        </button>
       </div>
     }
   }
@@ -148,6 +159,7 @@
           <span class="date">{{ tasks.date() }}</span>
           <ng-container *ngTemplateOutlet="projectFilterControl"></ng-container>
           <button type="button" class="ghost small" (click)="startBreak()">Take a break</button>
+          <button type="button" class="ghost small" (click)="startMeeting()">In a meeting</button>
         </div>
 
         @if (visibleToday().length) {
@@ -233,6 +245,8 @@
           (lengthsChanged)="tasks.setSessionLengths($event.focus, $event.brk)"
           (nudgeChanged)="tasks.setIdleNudgeMinutes($event)"
         ></app-working-rhythm>
+
+        <app-desk-light></app-desk-light>
       </section>
     } @else {
       <section class="board">

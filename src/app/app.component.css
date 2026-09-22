@@ -157,6 +157,12 @@ button.icon:hover {
   border-bottom-color: color-mix(in srgb, var(--link) 30%, transparent);
 }
 
+/* Red, matching the lamp on the desk: the two are showing the same fact. */
+.timer-bar.meeting {
+  background: color-mix(in srgb, #d1495b 14%, transparent);
+  border-bottom-color: color-mix(in srgb, #d1495b 34%, transparent);
+}
+
 .timer-bar i {
   color: var(--accent);
 }

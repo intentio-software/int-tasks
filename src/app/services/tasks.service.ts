@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { UnlistenFn, listen } from "@tauri-apps/api/event";
 
 import { TasksSyncState, TeamMember } from "../components/team-view.component";
-import { Board, DayProgress, LabelUse, List, Plotted, Session, Settings, Snapshot, Stats, Task, TaskContext, TimeSummary, TimerState, TodayEntry } from "../models/task.models";
+import { Board, DayProgress, LabelUse, LightMode, LightStatus, List, Plotted, Session, Settings, Snapshot, Stats, Task, TaskContext, TimeSummary, TimerState, TodayEntry } from "../models/task.models";
 
 /**
  * The app's single source of truth.
@@ -186,6 +186,36 @@ export class TasksService {
     await this.guard(() => invoke("set_hide_completed_after_days", { days }));
   }
 
+  async lightStatus(): Promise<LightStatus | null> {
+    return this.guard(() => invoke<LightStatus>("light_status"));
+  }
+
+  async setLightMode(mode: LightMode): Promise<LightStatus | null> {
+    return this.guard(() => invoke<LightStatus>("set_light_mode", { mode }));
+  }
+
+  async setLightSettings(settings: {
+    enabled: boolean;
+    port: string | null;
+    followTimer: boolean;
+  }): Promise<LightStatus | null> {
+    return this.guard(() => invoke<LightStatus>("set_light_settings", { settings }));
+  }
+
+  async findLight(): Promise<LightStatus | null> {
+    return this.guard(() => invoke<LightStatus>("find_light"));
+  }
+
+  /** Called when the light connects, drops or changes colour. */
+  async onLightChange(handler: (status: LightStatus) => void): Promise<() => void> {
+    try {
+      const { listen } = await import("@tauri-apps/api/event");
+      return await listen<LightStatus>("busylight", (event) => handler(event.payload));
+    } catch {
+      return () => undefined;
+    }
+  }
+
   async setSessionLengths(focus: number, brk: number): Promise<void> {
     await this.guard(() => invoke("set_session_lengths", { focus, brk }));
   }
@@ -206,12 +236,18 @@ export class TasksService {
   // timer
   // -------------------------------------------------------------------------
 
-  async startTimer(taskId?: string, minutes?: number, isBreak = false): Promise<void> {
+  async startTimer(
+    taskId?: string,
+    minutes?: number,
+    isBreak = false,
+    kind?: "focus" | "break" | "meeting"
+  ): Promise<void> {
     await this.guard(() =>
       invoke<TimerState>("start_timer", {
         taskId: taskId ?? null,
         minutes: minutes ?? null,
-        breakSession: isBreak
+        breakSession: isBreak,
+        kind: kind ?? null
       })
     );
   }

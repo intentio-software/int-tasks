@@ -181,18 +181,39 @@ fn light_status(state: State<'_, AppState>) -> busylight::LightStatus {
 
 /// Set the colour by hand, overriding whatever the timer would have chosen.
 #[tauri::command]
-fn set_light_mode(state: State<'_, AppState>, mode: busylight::Mode) -> busylight::LightStatus {
+fn set_light_mode(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    mode: busylight::Mode,
+) -> busylight::LightStatus {
     state.light.set_mode(mode);
+    busylight::announce(&app);
     state.light.status()
 }
 
 /// Turn the light on or off, choose a port, or stop it following the timer.
 #[tauri::command]
 fn set_light_settings(
+    app: AppHandle,
     state: State<'_, AppState>,
     settings: busylight::LightSettings,
 ) -> busylight::LightStatus {
+    let enabling = settings.enabled && !state.light.settings().enabled;
     state.light.update_settings(settings);
+    // Turning it on should look for the device now rather than in three
+    // seconds: the person has just pressed a switch and is watching.
+    if enabling {
+        state.light.connect_now();
+    }
+    busylight::announce(&app);
+    state.light.status()
+}
+
+/// Look for the device now.
+#[tauri::command]
+fn find_light(app: AppHandle, state: State<'_, AppState>) -> busylight::LightStatus {
+    state.light.connect_now();
+    busylight::announce(&app);
     state.light.status()
 }
 
@@ -844,7 +865,7 @@ pub fn run() {
                 // a quiet spell while the window is closed and you are working
                 // in something else.
                 nudge::spawn(handle.clone(), state.store.clone(), state.nudger.clone());
-                busylight::supervise(state.light.clone());
+                busylight::supervise(handle.clone(), state.light.clone());
 
                 // The light gets its own menu bar item rather than a corner of
                 // the timer's. The dot is what you glance at to see whether the
@@ -888,6 +909,7 @@ pub fn run() {
             light_status,
             set_light_mode,
             set_light_settings,
+            find_light,
             set_working_days,
             set_holidays,
             rename_project,
