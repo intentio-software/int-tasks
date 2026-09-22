@@ -1,3 +1,10 @@
+# [1.27.0](https://github.com/intentio-software/int-tasks/compare/v1.26.1...v1.27.0) (2026-09-22)
+
+
+### Features
+
+* a meeting can be about something ([80a40ab](https://github.com/intentio-software/int-tasks/commit/80a40abf97cd408730b8aff1e602a792faa6ab6e))
+
 ## [1.26.1](https://github.com/intentio-software/int-tasks/compare/v1.26.0...v1.26.1) (2026-09-22)
 
 
