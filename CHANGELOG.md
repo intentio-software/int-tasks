@@ -1,3 +1,10 @@
+## [1.26.1](https://github.com/intentio-software/int-tasks/compare/v1.26.0...v1.26.1) (2026-09-22)
+
+
+### Bug Fixes
+
+* build the Linux bundle again, and do not add an invisible tray ([124b023](https://github.com/intentio-software/int-tasks/commit/124b02337b9e3bed30fad118523595a97d2304da))
+
 # [1.26.0](https://github.com/intentio-software/int-tasks/compare/v1.25.0...v1.26.0) (2026-09-22)
 
 
