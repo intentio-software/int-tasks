@@ -20,9 +20,9 @@ import { Session, Task } from "../models/task.models";
     <div class="backdrop">
       <div class="panel">
         <header>
-          <i class="pi pi-clock"></i>
+          <i class="pi" [ngClass]="isMeeting ? 'pi-users' : 'pi-clock'"></i>
           <div>
-            <h2>{{ minutes }} minutes recorded</h2>
+            <h2>{{ minutes }} minutes {{ isMeeting ? "in a meeting" : "recorded" }}</h2>
             <p>What was that against?</p>
           </div>
         </header>
@@ -188,6 +188,10 @@ export class AssignSessionComponent {
 
   query = "";
   private readonly filter = signal("");
+
+  get isMeeting(): boolean {
+    return this.session?.kind === "meeting";
+  }
 
   get minutes(): number {
     return Math.max(1, Math.round(this.session.seconds / 60));

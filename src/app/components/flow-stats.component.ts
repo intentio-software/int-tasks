@@ -71,11 +71,23 @@ import { Stats, TimeSummary } from "../models/task.models";
           <h3>Where the time went</h3>
           <span class="scope">all time</span>
         </div>
+        @if (anyMeetings()) {
+          <p class="legend">
+            <span class="swatch"></span> focus
+            <span class="swatch meeting"></span> meetings
+          </p>
+        }
         @for (row of breakdown(); track row.id) {
           <div class="row">
             <span class="name" [class.unattributed]="!row.id">{{ row.title }}</span>
-            <span class="bar"><span class="fill" [style.width.%]="row.share"></span></span>
-            <span class="time">{{ row.label }}</span>
+            <span class="bar">
+              <span class="fill" [style.width.%]="row.share"></span>
+              <!-- The meeting share sits inside the same bar rather than
+                   beside it: it is part of this task's time, not a rival to
+                   it. -->
+              <span class="fill meeting" [style.width.%]="row.meetingShare"></span>
+            </span>
+            <span class="time" [title]="row.detail">{{ row.label }}</span>
           </div>
         }
       </div>
@@ -219,11 +231,40 @@ import { Stats, TimeSummary } from "../models/task.models";
         background: var(--hover);
         overflow: hidden;
       }
+      .bar {
+        position: relative;
+      }
       .fill {
         display: block;
         height: 100%;
         background: var(--accent);
         border-radius: 3px;
+      }
+      /* Drawn over the focus fill from the same origin, so the darker stretch
+         reads as "this much of it was meetings". */
+      .fill.meeting {
+        position: absolute;
+        inset: 0 auto 0 0;
+        background: color-mix(in srgb, var(--accent) 45%, var(--ink));
+      }
+      .legend {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        margin: 0.4rem 0 0;
+        font-size: 0.68rem;
+        color: var(--ink-faint);
+      }
+      .swatch {
+        display: inline-block;
+        width: 0.6rem;
+        height: 0.4rem;
+        border-radius: 2px;
+        background: var(--accent);
+      }
+      .swatch.meeting {
+        margin-left: 0.5rem;
+        background: color-mix(in srgb, var(--accent) 45%, var(--ink));
       }
       .time {
         width: 3.4rem;
@@ -241,6 +282,9 @@ export class FlowStatsComponent {
   }
 
   private readonly currentSummary = signal<TimeSummary | null>(null);
+
+  /** Whether any of this is meeting time, so the legend earns its place. */
+  readonly anyMeetings = computed(() => this.breakdown().some((row) => row.meetings > 0));
 
   focusLabel(minutes: number): string {
     if (minutes < 60) {
@@ -264,10 +308,18 @@ export class FlowStatsComponent {
     const rows = summary.by_task.map((entry) => ({
       id: entry.task_id,
       title: entry.title ?? "Deleted task",
-      seconds: entry.seconds
+      seconds: entry.seconds,
+      meetingSeconds: entry.meeting_seconds ?? 0,
+      meetings: entry.meetings ?? 0
     }));
     if (summary.unattributed_seconds > 0) {
-      rows.push({ id: "", title: "Unattributed", seconds: summary.unattributed_seconds });
+      rows.push({
+        id: "",
+        title: "Unattributed",
+        seconds: summary.unattributed_seconds,
+        meetingSeconds: 0,
+        meetings: 0
+      });
     }
     rows.sort((a, b) => b.seconds - a.seconds);
 
@@ -278,7 +330,12 @@ export class FlowStatsComponent {
     return rows.slice(0, 8).map((row) => ({
       ...row,
       share: largest ? (row.seconds / largest) * 100 : 0,
-      label: this.focusLabel(Math.round(row.seconds / 60))
+      meetingShare: largest ? (row.meetingSeconds / largest) * 100 : 0,
+      label: this.focusLabel(Math.round(row.seconds / 60)),
+      detail: row.meetings
+        ? `${this.focusLabel(Math.round(row.meetingSeconds / 60))} of that in ` +
+          `${row.meetings} meeting${row.meetings === 1 ? "" : "s"}`
+        : "All focus time"
     }));
   });
 }

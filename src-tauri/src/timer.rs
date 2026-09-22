@@ -270,9 +270,13 @@ pub fn focus_window<R: Runtime>(app: &AppHandle<R>) {
 /// Breaks are never asked about, and neither is a session already tied to a
 /// task; the question is only worth interrupting for when the answer is
 /// genuinely missing.
+///
+/// Meetings are asked about too. An hour on a call is usually an hour about
+/// something, and "which piece of work was that" is a question with an answer
+/// while you are still walking away from it.
 fn ask_to_assign<R: Runtime>(app: &AppHandle<R>, session: Option<Session>) {
     let Some(session) = session else { return };
-    if session.kind != SessionKind::Focus || session.task_id.is_some() {
+    if session.kind == SessionKind::Break || session.task_id.is_some() {
         return;
     }
     focus_window(app);

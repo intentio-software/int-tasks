@@ -211,9 +211,16 @@ export class AppComponent implements OnInit, OnDestroy {
     return kind === "meeting" ? "In a meeting" : "Focus";
   }
 
-  /** Start an open-ended meeting from the window. */
-  async startMeeting(): Promise<void> {
-    await this.tasks.startTimer(undefined, undefined, false, "meeting");
+  /**
+   * Start an open-ended meeting.
+   *
+   * Without a task when started from the toolbar — most meetings are not about
+   * one thing, and guessing would attribute an hour to work you may not have
+   * discussed. If it turns out to have been about something, you are asked
+   * when it ends.
+   */
+  async startMeeting(taskId?: string): Promise<void> {
+    await this.tasks.startTimer(taskId, undefined, false, "meeting");
   }
 
   readonly focusToday = computed(() => {
@@ -683,6 +690,9 @@ export class AppComponent implements OnInit, OnDestroy {
         break;
       case "timer":
         await this.toggleTimerFor(task);
+        break;
+      case "meeting":
+        await this.tasks.startTimer(task.id, undefined, false, "meeting");
         break;
       case "delete":
         // The detail panel may be showing the task that is about to go.

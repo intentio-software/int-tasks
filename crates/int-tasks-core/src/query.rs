@@ -242,6 +242,15 @@ pub struct TaskTime {
     pub title: Option<String>,
     pub seconds: u64,
     pub sessions: usize,
+    /// How much of `seconds` was spent in meetings about this task.
+    ///
+    /// Kept apart from the total rather than as a separate row: it is the same
+    /// work, but two hours of calls about a task and two hours of building it
+    /// are not the same two hours, and a reader should be able to tell.
+    #[serde(default)]
+    pub meeting_seconds: u64,
+    #[serde(default)]
+    pub meetings: usize,
 }
 
 /// Summarize focus time, optionally within a millisecond range.
@@ -260,14 +269,20 @@ pub fn time_summary(data: &Data, sessions: &[Session], from: Option<u64>, to: Op
         .filter(|session| to.map(|to| session.started_at <= to).unwrap_or(true))
         .collect();
 
-    let mut per_task: HashMap<&str, (u64, usize)> = HashMap::new();
+    // (total seconds, sessions, meeting seconds, meetings)
+    let mut per_task: HashMap<&str, (u64, usize, u64, usize)> = HashMap::new();
     let mut unattributed = 0u64;
     for session in &focus {
+        let is_meeting = session.kind == crate::model::SessionKind::Meeting;
         match session.task_id.as_deref() {
             Some(id) => {
-                let entry = per_task.entry(id).or_insert((0, 0));
+                let entry = per_task.entry(id).or_insert((0, 0, 0, 0));
                 entry.0 += session.seconds;
                 entry.1 += 1;
+                if is_meeting {
+                    entry.2 += session.seconds;
+                    entry.3 += 1;
+                }
             }
             None => unattributed += session.seconds,
         }
@@ -275,11 +290,13 @@ pub fn time_summary(data: &Data, sessions: &[Session], from: Option<u64>, to: Op
 
     let mut by_task: Vec<TaskTime> = per_task
         .into_iter()
-        .map(|(id, (seconds, count))| TaskTime {
+        .map(|(id, (seconds, count, meeting_seconds, meetings))| TaskTime {
             title: data.task(id).map(|task| task.title.clone()),
             task_id: id.to_string(),
             seconds,
             sessions: count,
+            meeting_seconds,
+            meetings,
         })
         .collect();
     by_task.sort_by(|a, b| b.seconds.cmp(&a.seconds).then_with(|| a.task_id.cmp(&b.task_id)));
@@ -477,6 +494,40 @@ mod tests {
 
         let filter = Filter { tag: Some("work".into()), ..Default::default() };
         assert_eq!(find(&data, &filter).len(), 1, "tags match case-insensitively");
+    }
+
+    #[test]
+    fn a_tasks_meeting_time_is_visible_inside_its_total() {
+        let mut task = Task::new("Ship the updater", "list_1");
+        task.id = "task_a".into();
+        let data = data_with(vec![task]);
+
+        let sessions = vec![
+            Session { id: "s1".into(), task_id: Some("task_a".into()), started_at: 1000, ended_at: 2000, seconds: 1500, kind: SessionKind::Focus, completed: true },
+            Session { id: "s2".into(), task_id: Some("task_a".into()), started_at: 3000, ended_at: 4000, seconds: 2400, kind: SessionKind::Meeting, completed: true },
+            // A break against the same task must not swell any of it.
+            Session { id: "s3".into(), task_id: Some("task_a".into()), started_at: 5000, ended_at: 6000, seconds: 300, kind: SessionKind::Break, completed: true },
+        ];
+
+        let summary = time_summary(&data, &sessions, None, None);
+        let row = &summary.by_task[0];
+        assert_eq!(row.seconds, 3900, "focus and meeting, not the break");
+        assert_eq!(row.meeting_seconds, 2400, "the meeting share is visible");
+        assert_eq!(row.meetings, 1);
+        assert_eq!(row.sessions, 2);
+    }
+
+    #[test]
+    fn a_task_with_no_meetings_says_so_with_zero() {
+        let mut task = Task::new("Fix the sync", "list_1");
+        task.id = "task_b".into();
+        let data = data_with(vec![task]);
+        let sessions = vec![Session {
+            id: "s1".into(), task_id: Some("task_b".into()), started_at: 1000, ended_at: 2000,
+            seconds: 1500, kind: SessionKind::Focus, completed: true,
+        }];
+        let summary = time_summary(&data, &sessions, None, None);
+        assert_eq!(summary.by_task[0].meeting_seconds, 0);
     }
 
     #[test]

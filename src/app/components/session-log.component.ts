@@ -39,9 +39,19 @@ interface SessionDay {
             </div>
 
             @for (session of day.sessions; track session.id) {
-              <div class="entry" [class.break]="session.kind === 'break'">
+              <div
+                class="entry"
+                [class.break]="session.kind === 'break'"
+                [class.meeting]="session.kind === 'meeting'"
+              >
                 <span class="when">{{ time(session) }}</span>
                 <span class="length">{{ minutes(session) }}m</span>
+                <!-- A meeting reads differently from focus of the same length,
+                     so say which it was rather than leaving them to look
+                     identical in the log. -->
+                @if (session.kind === 'meeting') {
+                  <span class="kind-tag" title="Meeting">👥</span>
+                }
 
                 @if (session.kind === 'break') {
                   <span class="against break-label">Break</span>
@@ -141,6 +151,9 @@ interface SessionDay {
       }
       .entry:hover {
         background: var(--hover);
+      }
+      .kind-tag {
+        font-size: 0.7rem;
       }
       .entry.break {
         opacity: 0.6;
@@ -260,12 +273,20 @@ export class SessionLogComponent {
   }
 
   readonly totalLabel = computed(() => {
-    const seconds = this.entries()
-      .filter((session) => session.kind === "focus")
+    const worked = this.entries().filter((session) => session.kind !== "break");
+    const seconds = worked.reduce((sum, session) => sum + session.seconds, 0);
+    const meetingSeconds = worked
+      .filter((session) => session.kind === "meeting")
       .reduce((sum, session) => sum + session.seconds, 0);
     const hours = Math.floor(seconds / 3600);
     const mins = Math.round((seconds % 3600) / 60);
-    return hours ? `${hours}h ${mins}m focused` : `${mins}m focused`;
+    const total = hours ? `${hours}h ${mins}m` : `${mins}m`;
+    // Naming the meeting share rather than folding it in: four hours that were
+    // all calls is a different day from four hours of focus.
+    if (!meetingSeconds) {
+      return `${total} focused`;
+    }
+    return `${total} worked, ${Math.round(meetingSeconds / 60)}m in meetings`;
   });
 
   readonly days = computed<SessionDay[]>(() => {
@@ -284,7 +305,7 @@ export class SessionLogComponent {
     return [...grouped.entries()].map(([key, sessions]) => ({
       label: key === today ? "Today" : key === yesterday ? "Yesterday" : key,
       minutes: Math.round(
-        sessions.filter((s) => s.kind === "focus").reduce((sum, s) => sum + s.seconds, 0) / 60
+        sessions.filter((s) => s.kind !== "break").reduce((sum, s) => sum + s.seconds, 0) / 60
       ),
       sessions
     }));

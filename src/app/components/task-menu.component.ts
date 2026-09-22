@@ -15,7 +15,7 @@ import { CommonModule } from "@angular/common";
 import { Task } from "../models/task.models";
 
 /** What the menu can do to a task. */
-export type TaskAction = "open" | "done" | "reopen" | "today" | "timer" | "delete";
+export type TaskAction = "open" | "done" | "reopen" | "today" | "timer" | "meeting" | "delete";
 
 /**
  * The right-click menu on a task.
@@ -62,6 +62,15 @@ export type TaskAction = "open" | "done" | "reopen" | "today" | "timer" | "delet
         <i class="pi" [ngClass]="running ? 'pi-stop-circle' : 'pi-play-circle'"></i>
         {{ running ? "Stop the timer" : "Start a focus session" }}
       </button>
+
+      @if (!running) {
+        <!-- A meeting about a task is still time on that task, and saying so
+             up front beats being asked afterwards. -->
+        <button type="button" role="menuitem" (click)="pick('meeting')">
+          <i class="pi pi-users"></i>
+          Meeting about this
+        </button>
+      }
 
       <div class="sep"></div>
 

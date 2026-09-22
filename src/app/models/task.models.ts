@@ -171,6 +171,9 @@ export interface TaskTime {
   title?: string;
   seconds: number;
   sessions: number;
+  /** How much of `seconds` was meetings about this task. */
+  meeting_seconds: number;
+  meetings: number;
 }
 
 export interface TimeSummary {
