@@ -54,7 +54,7 @@ import { Settings } from "../models/task.models";
               (ngModelChange)="lengthsChanged.emit({ focus: +$event, brk: settings?.breakMinutes ?? 5 })"
             >
               @for (n of focusChoices; track n) {
-                <option [value]="n">{{ n }} minutes</option>
+                <option [ngValue]="n">{{ n }} minutes</option>
               }
             </select>
           </div>
@@ -66,7 +66,7 @@ import { Settings } from "../models/task.models";
               (ngModelChange)="lengthsChanged.emit({ focus: settings?.focusMinutes ?? 25, brk: +$event })"
             >
               @for (n of breakChoices; track n) {
-                <option [value]="n">{{ n }} minutes</option>
+                <option [ngValue]="n">{{ n }} minutes</option>
               }
             </select>
           </div>
@@ -77,9 +77,9 @@ import { Settings } from "../models/task.models";
               [ngModel]="settings?.idleNudgeMinutes ?? 60"
               (ngModelChange)="nudgeChanged.emit(+$event)"
             >
-              <option [value]="0">Never</option>
+              <option [ngValue]="0">Never</option>
               @for (n of nudgeChoices; track n) {
-                <option [value]="n">{{ nudgeLabel(n) }} of quiet</option>
+                <option [ngValue]="n">{{ nudgeLabel(n) }} of quiet</option>
               }
             </select>
           </div>
@@ -91,7 +91,7 @@ import { Settings } from "../models/task.models";
               (ngModelChange)="hideAfterChanged.emit(+$event)"
             >
               @for (n of [1, 2, 3, 5, 10]; track n) {
-                <option [value]="n">{{ n }} working day{{ n === 1 ? "" : "s" }}</option>
+                <option [ngValue]="n">{{ n }} working day{{ n === 1 ? "" : "s" }}</option>
               }
             </select>
           </div>

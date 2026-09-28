@@ -148,8 +148,18 @@ export class TasksService {
     }
   }
 
+  /**
+   * Numbers are coerced on the way out, not trusted.
+   *
+   * A template can hand us a string whatever the signature says: an
+   * `(ngModelChange)` payload is `any`, and a DOM option value is always text.
+   * The Rust side wants a `u32` and rejects `"6"` outright, which surfaces as
+   * a line of red in the status bar and a setting that silently did not change.
+   * One `Number()` at the boundary is cheaper than getting every template
+   * right forever.
+   */
   async setDailyGoal(sessions: number): Promise<void> {
-    await this.guard(() => invoke("set_daily_goal", { sessions }));
+    await this.guard(() => invoke("set_daily_goal", { sessions: Number(sessions) }));
   }
 
   /** Project names in use, for filters and autocomplete. */
@@ -183,7 +193,7 @@ export class TasksService {
   }
 
   async setHideCompletedAfterDays(days: number): Promise<void> {
-    await this.guard(() => invoke("set_hide_completed_after_days", { days }));
+    await this.guard(() => invoke("set_hide_completed_after_days", { days: Number(days) }));
   }
 
   async lightStatus(): Promise<LightStatus | null> {
@@ -217,11 +227,13 @@ export class TasksService {
   }
 
   async setSessionLengths(focus: number, brk: number): Promise<void> {
-    await this.guard(() => invoke("set_session_lengths", { focus, brk }));
+    await this.guard(() =>
+      invoke("set_session_lengths", { focus: Number(focus), brk: Number(brk) })
+    );
   }
 
   async setIdleNudgeMinutes(minutes: number): Promise<void> {
-    await this.guard(() => invoke("set_idle_nudge_minutes", { minutes }));
+    await this.guard(() => invoke("set_idle_nudge_minutes", { minutes: Number(minutes) }));
   }
 
   async addBoard(name: string): Promise<Board | null> {

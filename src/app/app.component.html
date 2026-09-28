@@ -69,11 +69,16 @@
             <select
               class="goal-select"
               [ngModel]="stats.dailyGoal"
-              (ngModelChange)="tasks.setDailyGoal($event)"
+              (ngModelChange)="tasks.setDailyGoal(+$event)"
               aria-label="Daily focus goal"
             >
               @for (option of goalOptions; track option) {
-                <option [value]="option">{{ option }}</option>
+                <!-- ngValue, not value: a DOM option value is always a string,
+                     so [value] would send "6" to a command expecting a number
+                     and the change would be rejected without anyone seeing it.
+                     It also stops the current goal matching, which is why this
+                     read 4 whatever you picked. -->
+                <option [ngValue]="option">{{ option }}</option>
               }
             </select>
           </span>
