@@ -1,3 +1,10 @@
+## [1.27.1](https://github.com/intentio-software/int-tasks/compare/v1.27.0...v1.27.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* the daily focus goal can actually be changed ([6f64964](https://github.com/intentio-software/int-tasks/commit/6f64964ec81042c083fe7c8285a606c159768b45))
+
 # [1.27.0](https://github.com/intentio-software/int-tasks/compare/v1.26.1...v1.27.0) (2026-09-22)
 
 
