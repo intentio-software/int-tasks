@@ -1,0 +1,10 @@
+/* Tests. Kept apart from tsconfig.app.json, which deliberately excludes
+   *.spec.ts so test files never reach a production bundle. */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./out-tsc/spec",
+    "types": ["vitest/globals"]
+  },
+  "include": ["src/**/*.spec.ts", "src/**/*.d.ts"]
+}

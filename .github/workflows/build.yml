@@ -56,6 +56,12 @@ jobs:
 
       - run: npm ci
 
+      # Before anything is compiled or signed. The frontend suite runs in jsdom
+      # and takes a couple of seconds, which is a cheap place to find out that a
+      # template is sending a string where a command wants a number.
+      - name: Test
+        run: npm run test:web
+
       # Both secrets are validated before anything is compiled. A malformed one
       # otherwise surfaces only at the signing step, after a multi-minute build.
       - name: Verify signing key is usable

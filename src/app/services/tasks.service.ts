@@ -1,5 +1,5 @@
-import { Injectable, computed, signal } from "@angular/core";
-import { invoke } from "@tauri-apps/api/core";
+import { InjectionToken, Injectable, computed, inject, signal } from "@angular/core";
+import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { UnlistenFn, listen } from "@tauri-apps/api/event";
 
 import { TasksSyncState, TeamMember } from "../components/team-view.component";
@@ -13,8 +13,22 @@ import { Board, DayProgress, LabelUse, LightMode, LightStatus, List, Plotted, Se
  * the MCP server may be writing to the same store at the same time — and one
  * round trip is cheaper than reasoning about which local copy is stale.
  */
+/**
+ * How the app reaches Rust.
+ *
+ * Injected rather than imported so tests can stand in for it. The unit-test
+ * builder bundles specs before Vitest sees them, so a module mock never takes
+ * effect - the seam has to be in the app, not the test.
+ */
+export const INVOKE = new InjectionToken<typeof tauriInvoke>("invoke", {
+  providedIn: "root",
+  factory: () => tauriInvoke
+});
+
 @Injectable({ providedIn: "root" })
 export class TasksService {
+  private readonly invoke = inject(INVOKE);
+
   readonly boards = signal<Board[]>([]);
   readonly tasks = signal<Task[]>([]);
   readonly today = signal<TodayEntry[]>([]);
@@ -56,14 +70,14 @@ export class TasksService {
 
   async load(): Promise<void> {
     try {
-      const snapshot = await invoke<Snapshot>("snapshot");
+      const snapshot = await this.invoke<Snapshot>("snapshot");
       this.apply(snapshot);
       this.error.set(null);
     } catch (error) {
       this.error.set(messageFor(error));
     }
     if (!this.storePath()) {
-      this.storePath.set(await invoke<string>("store_path").catch(() => ""));
+      this.storePath.set(await this.invoke<string>("store_path").catch(() => ""));
     }
   }
 
@@ -114,35 +128,35 @@ export class TasksService {
   // -------------------------------------------------------------------------
 
   async addTask(title: string, listId?: string): Promise<Task | null> {
-    return this.guard(() => invoke<Task>("add_task", { title, listId: listId ?? null }));
+    return this.guard(() => this.invoke<Task>("add_task", { title, listId: listId ?? null }));
   }
 
   async setDone(taskId: string, done: boolean): Promise<void> {
-    await this.guard(() => invoke<Task>("set_done", { taskId, done }));
+    await this.guard(() => this.invoke<Task>("set_done", { taskId, done }));
   }
 
   async moveTask(taskId: string, listId: string, position?: number): Promise<void> {
-    await this.guard(() => invoke<Task>("move_task", { taskId, listId, position: position ?? null }));
+    await this.guard(() => this.invoke<Task>("move_task", { taskId, listId, position: position ?? null }));
   }
 
   async deleteTask(taskId: string): Promise<void> {
-    await this.guard(() => invoke<Task>("delete_task", { taskId }));
+    await this.guard(() => this.invoke<Task>("delete_task", { taskId }));
   }
 
   /** Patch a task. Omitted fields are untouched; `null` clears one. */
   async updateTask(taskId: string, patch: Record<string, unknown>): Promise<void> {
-    await this.guard(() => invoke<Task>("update_task", { taskId, ...patch }));
+    await this.guard(() => this.invoke<Task>("update_task", { taskId, ...patch }));
   }
 
   /** Set or clear the matrix scores. */
   async scoreTask(taskId: string, impact: number | null, effort: number | null): Promise<void> {
-    await this.guard(() => invoke<Task>("score_task", { taskId, impact, effort }));
+    await this.guard(() => this.invoke<Task>("score_task", { taskId, impact, effort }));
   }
 
   /** Ask for something worth doing now. */
   async suggest(lowEnergy: boolean): Promise<Plotted | null> {
     try {
-      return await invoke<Plotted | null>("suggest_task", { lowEnergy });
+      return await this.invoke<Plotted | null>("suggest_task", { lowEnergy });
     } catch {
       return null;
     }
@@ -159,7 +173,7 @@ export class TasksService {
    * right forever.
    */
   async setDailyGoal(sessions: number): Promise<void> {
-    await this.guard(() => invoke("set_daily_goal", { sessions: Number(sessions) }));
+    await this.guard(() => this.invoke("set_daily_goal", { sessions: Number(sessions) }));
   }
 
   /** Project names in use, for filters and autocomplete. */
@@ -169,39 +183,39 @@ export class TasksService {
   readonly tagNames = computed<string[]>(() => this.tagLabels().map((label) => label.name));
 
   async renameProject(from: string, to: string): Promise<void> {
-    await this.guard(() => invoke<number>("rename_project", { from, to }));
+    await this.guard(() => this.invoke<number>("rename_project", { from, to }));
   }
 
   async deleteProject(name: string): Promise<void> {
-    await this.guard(() => invoke<number>("delete_project", { name }));
+    await this.guard(() => this.invoke<number>("delete_project", { name }));
   }
 
   async renameTag(from: string, to: string): Promise<void> {
-    await this.guard(() => invoke<number>("rename_tag", { from, to }));
+    await this.guard(() => this.invoke<number>("rename_tag", { from, to }));
   }
 
   async deleteTag(name: string): Promise<void> {
-    await this.guard(() => invoke<number>("delete_tag", { name }));
+    await this.guard(() => this.invoke<number>("delete_tag", { name }));
   }
 
   async setWorkingDays(days: number[]): Promise<void> {
-    await this.guard(() => invoke("set_working_days", { days }));
+    await this.guard(() => this.invoke("set_working_days", { days }));
   }
 
   async setHolidays(holidays: string[]): Promise<void> {
-    await this.guard(() => invoke("set_holidays", { holidays }));
+    await this.guard(() => this.invoke("set_holidays", { holidays }));
   }
 
   async setHideCompletedAfterDays(days: number): Promise<void> {
-    await this.guard(() => invoke("set_hide_completed_after_days", { days: Number(days) }));
+    await this.guard(() => this.invoke("set_hide_completed_after_days", { days: Number(days) }));
   }
 
   async lightStatus(): Promise<LightStatus | null> {
-    return this.guard(() => invoke<LightStatus>("light_status"));
+    return this.guard(() => this.invoke<LightStatus>("light_status"));
   }
 
   async setLightMode(mode: LightMode): Promise<LightStatus | null> {
-    return this.guard(() => invoke<LightStatus>("set_light_mode", { mode }));
+    return this.guard(() => this.invoke<LightStatus>("set_light_mode", { mode }));
   }
 
   async setLightSettings(settings: {
@@ -209,11 +223,11 @@ export class TasksService {
     port: string | null;
     followTimer: boolean;
   }): Promise<LightStatus | null> {
-    return this.guard(() => invoke<LightStatus>("set_light_settings", { settings }));
+    return this.guard(() => this.invoke<LightStatus>("set_light_settings", { settings }));
   }
 
   async findLight(): Promise<LightStatus | null> {
-    return this.guard(() => invoke<LightStatus>("find_light"));
+    return this.guard(() => this.invoke<LightStatus>("find_light"));
   }
 
   /** Called when the light connects, drops or changes colour. */
@@ -228,20 +242,20 @@ export class TasksService {
 
   async setSessionLengths(focus: number, brk: number): Promise<void> {
     await this.guard(() =>
-      invoke("set_session_lengths", { focus: Number(focus), brk: Number(brk) })
+      this.invoke("set_session_lengths", { focus: Number(focus), brk: Number(brk) })
     );
   }
 
   async setIdleNudgeMinutes(minutes: number): Promise<void> {
-    await this.guard(() => invoke("set_idle_nudge_minutes", { minutes: Number(minutes) }));
+    await this.guard(() => this.invoke("set_idle_nudge_minutes", { minutes: Number(minutes) }));
   }
 
   async addBoard(name: string): Promise<Board | null> {
-    return this.guard(() => invoke<Board>("add_board", { name }));
+    return this.guard(() => this.invoke<Board>("add_board", { name }));
   }
 
   async addList(boardId: string, name: string): Promise<List | null> {
-    return this.guard(() => invoke<List>("add_list", { boardId, name }));
+    return this.guard(() => this.invoke<List>("add_list", { boardId, name }));
   }
 
   // -------------------------------------------------------------------------
@@ -255,7 +269,7 @@ export class TasksService {
     kind?: "focus" | "break" | "meeting"
   ): Promise<void> {
     await this.guard(() =>
-      invoke<TimerState>("start_timer", {
+      this.invoke<TimerState>("start_timer", {
         taskId: taskId ?? null,
         minutes: minutes ?? null,
         breakSession: isBreak,
@@ -265,22 +279,22 @@ export class TasksService {
   }
 
   async stopTimer(): Promise<void> {
-    await this.guard(() => invoke<TimerState>("stop_timer"));
+    await this.guard(() => this.invoke<TimerState>("stop_timer"));
   }
 
   async pauseTimer(): Promise<void> {
     // No reload: pausing changes the timer, not the store.
-    this.timer.set(await invoke<TimerState>("pause_timer"));
+    this.timer.set(await this.invoke<TimerState>("pause_timer"));
   }
 
   async resumeTimer(): Promise<void> {
-    this.timer.set(await invoke<TimerState>("resume_timer"));
+    this.timer.set(await this.invoke<TimerState>("resume_timer"));
   }
 
   /** Recorded sessions, newest first. */
   async loadSessions(): Promise<void> {
     try {
-      const sessions = await invoke<Session[]>("sessions");
+      const sessions = await this.invoke<Session[]>("sessions");
       this.sessions.set([...sessions].sort((a, b) => b.started_at - a.started_at));
     } catch {
       // The history is a review surface; failing to read it must not break the app.
@@ -288,7 +302,7 @@ export class TasksService {
   }
 
   async deleteSession(sessionId: string): Promise<void> {
-    await this.guard(() => invoke<Session>("delete_session", { sessionId }));
+    await this.guard(() => this.invoke<Session>("delete_session", { sessionId }));
     await this.loadSessions();
   }
 
@@ -301,34 +315,34 @@ export class TasksService {
   /** Everyone whose store sits beside ours. Empty when working alone. */
   async loadTeam(): Promise<void> {
     try {
-      this.team.set(await invoke<TeamMember[]>("team"));
+      this.team.set(await this.invoke<TeamMember[]>("team"));
     } catch {
       this.team.set([]);
     }
   }
 
   async assignTo(member: string, line: string): Promise<void> {
-    await this.guard(() => invoke<Task>("assign_to", { member, line }));
+    await this.guard(() => this.invoke<Task>("assign_to", { member, line }));
     await this.loadTeam();
   }
 
   /** Where the team folder stands with its remote, and the sync preference. */
   async loadSyncState(): Promise<void> {
     try {
-      this.syncState.set(await invoke<TasksSyncState>("tasks_sync_status"));
+      this.syncState.set(await this.invoke<TasksSyncState>("tasks_sync_status"));
     } catch {
       this.syncState.set(null);
     }
   }
 
   async setSync(enabled: boolean, intervalSeconds?: number): Promise<void> {
-    await invoke("set_tasks_sync", { enabled, intervalSeconds: intervalSeconds ?? null });
+    await this.invoke("set_tasks_sync", { enabled, intervalSeconds: intervalSeconds ?? null });
     await this.loadSyncState();
   }
 
   async syncTasks(): Promise<string | null> {
     try {
-      const outcome = await invoke<{ changed: boolean; message: string; blocked?: string }>(
+      const outcome = await this.invoke<{ changed: boolean; message: string; blocked?: string }>(
         "tasks_sync_now"
       );
       await this.load();
@@ -341,12 +355,12 @@ export class TasksService {
   }
 
   async chooseStoreRoot(root: string | null): Promise<void> {
-    await this.guard(() => invoke("set_store_root", { root }));
+    await this.guard(() => this.invoke("set_store_root", { root }));
   }
 
   async taskContext(origin: string): Promise<TaskContext | null> {
     try {
-      return await invoke<TaskContext>("task_context", { origin });
+      return await this.invoke<TaskContext>("task_context", { origin });
     } catch {
       // Context is a convenience; failing to fetch it must not break the panel.
       return null;
@@ -354,7 +368,7 @@ export class TasksService {
   }
 
   async assignSession(sessionId: string, taskId: string | null): Promise<void> {
-    await this.guard(() => invoke<Session>("assign_session", { sessionId, taskId }));
+    await this.guard(() => this.invoke<Session>("assign_session", { sessionId, taskId }));
     await this.loadSessions();
   }
 
