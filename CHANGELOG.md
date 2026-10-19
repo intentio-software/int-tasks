@@ -1,3 +1,10 @@
+# [1.28.0](https://github.com/intentio-software/int-tasks/compare/v1.27.1...v1.28.0) (2026-10-19)
+
+
+### Features
+
+* a list of what the keyboard does ([d3415d6](https://github.com/intentio-software/int-tasks/commit/d3415d625b7d2a1d850f4b0f510020ce6407e151))
+
 ## [1.27.1](https://github.com/intentio-software/int-tasks/compare/v1.27.0...v1.27.1) (2026-09-28)
 
 
