@@ -15,6 +15,10 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { Button } from "primeng/button";
 import { Toast } from "primeng/toast";
 
+import {
+  ShortcutGroup,
+  ShortcutsDialogComponent
+} from "./components/shortcuts-dialog.component";
 import { AboutDialogComponent } from "./components/about-dialog.component";
 import { AssignSessionComponent } from "./components/assign-session.component";
 import { LabelEdit, LabelKind, LabelsDialogComponent } from "./components/labels-dialog.component";
@@ -46,6 +50,7 @@ type View = "today" | "board" | "matrix" | "flow" | "team";
     Toast,
     Button,
     AboutDialogComponent,
+    ShortcutsDialogComponent,
     AssignSessionComponent,
     LabelsDialogComponent,
     MatrixViewComponent,
@@ -70,6 +75,44 @@ export class AppComponent implements OnInit, OnDestroy {
 
   readonly view = signal<View>("today");
   readonly aboutOpen = signal(false);
+  readonly shortcutsOpen = signal(false);
+
+  /**
+   * What the keyboard does.
+   *
+   * The menu bar already lists the menu items with their keys beside them.
+   * What is written down here is everything else: the things you can only
+   * find out by being told.
+   */
+  readonly shortcutGroups: ShortcutGroup[] = [
+    {
+      title: "Views",
+      shortcuts: [
+        { keys: "⌘1 – ⌘4", does: "Today, Board, Flow, Team" },
+        { keys: "⌘N", does: "New task" },
+        { keys: "Escape", does: "Close whatever is open" }
+      ]
+    },
+    {
+      title: "Focus",
+      shortcuts: [
+        { keys: "⌘T", does: "Start a focus session" },
+        { keys: "⌘⇧T", does: "Stop the timer" },
+        { keys: "Tray icon", does: "Start, pause or end without opening the window" }
+      ]
+    },
+    {
+      title: "Capture",
+      shortcuts: [
+        { keys: "(project)", does: "File it under a client, e.g. (stm)" },
+        { keys: "(client/code)", does: "And a project within it, e.g. (dbc/dfm)" },
+        { keys: "[tag]", does: "Label it" },
+        { keys: "@name", does: "Give it to a colleague" },
+        { keys: "due:", does: "today, tomorrow, +3 or a date" },
+        { keys: "i: e:", does: "Impact and effort, 1 to 10" }
+      ]
+    }
+  ];
   readonly labelsOpen = signal(false);
   /** A finished focus session that landed against no task. */
   readonly unassignedSession = signal<Session | null>(null);

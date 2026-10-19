@@ -96,7 +96,10 @@
       <button type="button" class="icon" title="Manage projects and tags" (click)="labelsOpen.set(true)">
         <i class="pi pi-tags"></i>
       </button>
-      <button type="button" class="icon" title="About Intentio Tasks" (click)="aboutOpen.set(true)">
+      <button type="button" class="icon" title="Keyboard shortcuts" (click)="shortcutsOpen.set(true)">
+          <i class="pi pi-question-circle"></i>
+        </button>
+        <button type="button" class="icon" title="About Intentio Tasks" (click)="aboutOpen.set(true)">
         <i class="pi pi-info-circle"></i>
       </button>
     </div>
@@ -369,6 +372,13 @@
     (remove)="removeLabel($event)"
     (closed)="labelsOpen.set(false)"
   ></app-labels-dialog>
+}
+
+@if (shortcutsOpen()) {
+  <app-shortcuts-dialog
+    [groups]="shortcutGroups"
+    (closed)="shortcutsOpen.set(false)"
+  ></app-shortcuts-dialog>
 }
 
 @if (aboutOpen()) {
