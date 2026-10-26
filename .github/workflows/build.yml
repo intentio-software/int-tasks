@@ -29,9 +29,12 @@ jobs:
         with:
           ref: ${{ github.event.client_payload.tag }}
 
+      # 22 is a floor, not a preference: jsdom 30 bundles undici 8, which needs
+      # the markAsUncloneable that node:worker_threads only grew in 22. On 20 the
+      # suite dies while loading jsdom, before a single test runs.
       - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
           cache: npm
 
       - uses: dtolnay/rust-toolchain@stable
@@ -193,7 +196,7 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Publish release
         shell: bash
