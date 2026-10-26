@@ -1,3 +1,10 @@
+# [1.29.0](https://github.com/intentio-software/int-tasks/compare/v1.28.0...v1.29.0) (2026-10-26)
+
+
+### Features
+
+* make a task from the session that just ended ([dd4baf5](https://github.com/intentio-software/int-tasks/commit/dd4baf5c6d464f9f7ef5f24e50c427e03a19db95))
+
 # [1.28.0](https://github.com/intentio-software/int-tasks/compare/v1.27.1...v1.28.0) (2026-10-19)
 
 
