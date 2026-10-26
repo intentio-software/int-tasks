@@ -349,6 +349,7 @@
     [session]="session"
     [tasks]="tasks.tasks()"
     (assigned)="assignUnassigned($event)"
+    (created)="createFromSession($event)"
     (skipped)="dismissUnassigned()"
   ></app-assign-session>
 }

@@ -1,8 +1,18 @@
-import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output, computed, signal } from "@angular/core";
+import {
+  ChangeDetectionStrategy,
+  Component,
+  EventEmitter,
+  Input,
+  Output,
+  computed,
+  inject,
+  signal
+} from "@angular/core";
 import { CommonModule } from "@angular/common";
 import { FormsModule } from "@angular/forms";
 
-import { Session, Task } from "../models/task.models";
+import { CapturePreview, Session, Task } from "../models/task.models";
+import { TasksService } from "../services/tasks.service";
 
 /**
  * Asking what a finished session counted towards.
@@ -31,12 +41,37 @@ import { Session, Task } from "../models/task.models";
           <input
             class="filter"
             type="text"
-            placeholder="Filter tasks…"
+            placeholder="Find a task, or type a new one…"
             [(ngModel)]="query"
             (ngModelChange)="queryChanged($event)"
             autofocus
           />
           <ul class="list">
+            <!-- What you typed, as a new task. First rather than last: when
+                 nothing matches, this is the answer, and having to look past
+                 an empty list to find it would be backwards. -->
+            @if (typed().trim()) {
+              <li>
+                <button type="button" class="make" (click)="created.emit(typed().trim())">
+                  <span class="title">
+                    Create <strong>{{ captured().title }}</strong>
+                  </span>
+                  <span class="made">
+                    @if (captured().project) {
+                      <span class="chip">{{ captured().project }}</span>
+                    }
+                    @for (tag of captured().tags; track tag) {
+                      <span class="chip tag">{{ tag }}</span>
+                    }
+                    @if (captured().due) {
+                      <span class="chip">due {{ captured().due }}</span>
+                    }
+                    <span class="chip time">+{{ minutes }}m</span>
+                  </span>
+                </button>
+              </li>
+            }
+
             @for (task of candidates(); track task.id) {
               <li>
                 <button type="button" (click)="assigned.emit(task.id)">
@@ -47,10 +82,30 @@ import { Session, Task } from "../models/task.models";
             }
           </ul>
         } @else {
-          <p class="empty">
-            No open tasks to attribute it to. The time is still recorded — it will show as
-            unattributed in the time summary.
-          </p>
+          <input
+            class="filter"
+            type="text"
+            placeholder="What was it about?"
+            [(ngModel)]="query"
+            (ngModelChange)="queryChanged($event)"
+            (keydown.enter)="query.trim() && created.emit(query.trim())"
+            autofocus
+          />
+          @if (query.trim()) {
+            <ul class="list">
+              <li>
+                <button type="button" class="make" (click)="created.emit(query.trim())">
+                  <span class="title">Create <strong>{{ captured().title }}</strong></span>
+                  <span class="made"><span class="chip time">+{{ minutes }}m</span></span>
+                </button>
+              </li>
+            </ul>
+          } @else {
+            <p class="empty">
+              Nothing open to attribute it to. Type what it was about and it becomes a task with
+              this time already on it, or leave it unattributed — which is a real answer.
+            </p>
+          }
         }
 
         <footer>
@@ -151,6 +206,38 @@ import { Session, Task } from "../models/task.models";
         font-size: 0.7rem;
         color: var(--ink-faint);
       }
+      /* The "create this" row. Marked out from the tasks below it, because it
+         does something different: those attribute, this makes. */
+      .make {
+        border-left: 2px solid var(--accent);
+      }
+      .make .title strong {
+        color: var(--ink-strong);
+        font-weight: 600;
+      }
+      .made {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        flex-wrap: wrap;
+      }
+      .chip {
+        padding: 1px 6px;
+        border-radius: 5px;
+        background: var(--hover);
+        color: var(--ink-faint);
+        font-size: 10.5px;
+      }
+      .chip.tag {
+        color: var(--link);
+      }
+      /* The minutes about to be recorded against it, so there is no doubt
+         what pressing this does with the time. */
+      .chip.time {
+        background: var(--selected);
+        color: var(--accent);
+      }
+
       .empty {
         margin: 0;
         font-size: 0.8rem;
@@ -184,7 +271,11 @@ export class AssignSessionComponent {
   @Input() tasks: Task[] = [];
 
   @Output() readonly assigned = new EventEmitter<string>();
+  /** A line to make a task from, in the usual capture syntax. */
+  @Output() readonly created = new EventEmitter<string>();
   @Output() readonly skipped = new EventEmitter<void>();
+
+  private readonly tasksService = inject(TasksService);
 
   query = "";
   private readonly filter = signal("");
@@ -211,7 +302,30 @@ export class AssignSessionComponent {
     return matching.slice(0, 8);
   });
 
+  /** What is in the box, for the "create this" row. */
+  readonly typed = computed(() => this.filter());
+
+  /**
+   * What the typed line would become.
+   *
+   * Parsed by the same code the real capture uses, through a command, rather
+   * than a lighter version here: two sets of rules about what `(dbc/dfm)` or
+   * `due:tomorrow` mean would drift, and the preview would start promising
+   * something the capture does not deliver.
+   */
+  readonly captured = signal<CapturePreview>({ title: "", tags: [] });
+
   queryChanged(value: string): void {
     this.filter.set(value);
+    const line = value.trim();
+    if (!line) {
+      this.captured.set({ title: "", tags: [] });
+      return;
+    }
+    void this.tasksService.previewCapture(line).then((preview) => {
+      if (preview && this.filter().trim() === line) {
+        this.captured.set(preview);
+      }
+    });
   }
 }

@@ -159,6 +159,26 @@ fn set_holidays(state: State<'_, AppState>, holidays: Vec<String>) -> Result<(),
     state.store.set_holidays(holidays).map(|_| ()).map_err(fail)
 }
 
+/// What a capture line would become, without creating anything.
+///
+/// The same parser the real capture uses, so the preview cannot disagree with
+/// the result. A second implementation in the frontend would be a second set
+/// of rules about what `(dbc/dfm)` means, and the two would drift.
+#[tauri::command]
+fn preview_capture(line: String) -> serde_json::Value {
+    let parsed = int_tasks_core::capture::parse(&line);
+    serde_json::json!({
+        "title": parsed.title,
+        "project": parsed.project,
+        "projectCode": parsed.project_code,
+        "tags": parsed.tags,
+        "owner": parsed.owner,
+        "due": parsed.due,
+        "impact": parsed.impact,
+        "effort": parsed.effort,
+    })
+}
+
 /// Change how long focus and break sessions run.
 #[tauri::command]
 fn set_session_lengths(
@@ -911,6 +931,7 @@ pub fn run() {
             suggest_task,
             set_daily_goal,
             set_hide_completed_after_days,
+            preview_capture,
             set_session_lengths,
             set_idle_nudge_minutes,
             light_status,

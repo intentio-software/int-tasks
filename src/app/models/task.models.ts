@@ -197,3 +197,15 @@ export interface Snapshot {
   settings: Settings;
   date: string;
 }
+
+/** What a capture line parses to, before anything is created. */
+export interface CapturePreview {
+  title: string;
+  project?: string | null;
+  projectCode?: string | null;
+  tags: string[];
+  owner?: string | null;
+  due?: string | null;
+  impact?: number | null;
+  effort?: number | null;
+}

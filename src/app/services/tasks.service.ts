@@ -3,7 +3,7 @@ import { invoke as tauriInvoke } from "@tauri-apps/api/core";
 import { UnlistenFn, listen } from "@tauri-apps/api/event";
 
 import { TasksSyncState, TeamMember } from "../components/team-view.component";
-import { Board, DayProgress, LabelUse, LightMode, LightStatus, List, Plotted, Session, Settings, Snapshot, Stats, Task, TaskContext, TimeSummary, TimerState, TodayEntry } from "../models/task.models";
+import { Board, CapturePreview, DayProgress, LabelUse, LightMode, LightStatus, List, Plotted, Session, Settings, Snapshot, Stats, Task, TaskContext, TimeSummary, TimerState, TodayEntry } from "../models/task.models";
 
 /**
  * The app's single source of truth.
@@ -238,6 +238,11 @@ export class TasksService {
     } catch {
       return () => undefined;
     }
+  }
+
+  /** What a capture line would become. The same parser the real capture uses. */
+  async previewCapture(line: string): Promise<CapturePreview | null> {
+    return this.guard(() => this.invoke<CapturePreview>("preview_capture", { line }));
   }
 
   async setSessionLengths(focus: number, brk: number): Promise<void> {

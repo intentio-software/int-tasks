@@ -755,6 +755,31 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
+  /**
+   * Make a task from what was typed, and put this time on it.
+   *
+   * The common case for a meeting: the thing you discussed is not a task yet,
+   * and the moment you are most able to name it is the moment it ended. Before
+   * this the choice was an existing task or nothing, which quietly taught
+   * people to leave meetings unattributed.
+   *
+   * The line goes through the ordinary capture, so `(dbc) revise the quote
+   * due:friday` works here exactly as it does in the bar at the top.
+   */
+  async createFromSession(line: string): Promise<void> {
+    const session = this.unassignedSession();
+    this.unassignedSession.set(null);
+    if (!session) {
+      return;
+    }
+    const task = await this.tasks.addTask(line);
+    if (task) {
+      await this.tasks.assignSession(session.id, task.id);
+    }
+    // If the task could not be made, the session stays unattributed rather
+    // than vanishing: the time was real either way.
+  }
+
   /** Leave it as unattributed time, which is a real answer rather than a dodge. */
   dismissUnassigned(): void {
     this.unassignedSession.set(null);
