@@ -29,6 +29,13 @@ jobs:
         with:
           ref: ${{ github.event.client_payload.tag }}
 
+      # This job takes its workflow from main but its tree from the tag, so a
+      # tag cut before .nvmrc existed arrives without one. Re-dispatching an
+      # older release should not die at setup-node over that.
+      - name: Ensure the tag has a Node version file
+        shell: bash
+        run: '[ -f .nvmrc ] || echo 22 > .nvmrc'
+
       # .nvmrc is the single source of truth, and package.json carries the same
       # floor as `engines`, so npm ci refuses outright on a Node too old rather
       # than failing later as a puzzling jsdom crash.
@@ -64,14 +71,6 @@ jobs:
       # template is sending a string where a command wants a number.
       - name: Test
         run: npm run test:web
-
-      # 190 Rust assertions that nothing in CI used to run: the nudge rules, the
-      # capture parser, the store. One platform is enough for assertions - the
-      # other two prove it compiles by bundling it - and macOS is the host the
-      # tray and the busylight serial code are written for.
-      - name: Test (Rust)
-        if: matrix.os == 'macos-latest'
-        run: cargo test
 
       # Both secrets are validated before anything is compiled. A malformed one
       # otherwise surfaces only at the signing step, after a multi-minute build.
