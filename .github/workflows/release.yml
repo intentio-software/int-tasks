@@ -19,10 +19,30 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
           cache: npm
 
       - run: npm ci
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .
+
+      # The gate, and the reason this job is no longer just a tagger. Everything
+      # below cuts a tag, bumps the version and dispatches the build; a suite
+      # that only ran afterwards could not stop any of it, which is how two
+      # versions came to exist with nothing behind them. A red suite now means
+      # no tag at all.
+      #
+      # Only the two pure crates: they need no webkit, no GTK and no signing, so
+      # they cost seconds here. src-tauri is tested in the build, where the
+      # system libraries it links against are already installed.
+      - name: Test
+        run: |
+          npm run test:web
+          cargo test -p int-tasks-core -p int-tasks-mcp
 
       - name: Record latest tag before release
         id: pre

@@ -29,12 +29,12 @@ jobs:
         with:
           ref: ${{ github.event.client_payload.tag }}
 
-      # 22 is a floor, not a preference: jsdom 30 bundles undici 8, which needs
-      # the markAsUncloneable that node:worker_threads only grew in 22. On 20 the
-      # suite dies while loading jsdom, before a single test runs.
+      # .nvmrc is the single source of truth, and package.json carries the same
+      # floor as `engines`, so npm ci refuses outright on a Node too old rather
+      # than failing later as a puzzling jsdom crash.
       - uses: actions/setup-node@v5
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
           cache: npm
 
       - uses: dtolnay/rust-toolchain@stable
@@ -64,6 +64,14 @@ jobs:
       # template is sending a string where a command wants a number.
       - name: Test
         run: npm run test:web
+
+      # 190 Rust assertions that nothing in CI used to run: the nudge rules, the
+      # capture parser, the store. One platform is enough for assertions - the
+      # other two prove it compiles by bundling it - and macOS is the host the
+      # tray and the busylight serial code are written for.
+      - name: Test (Rust)
+        if: matrix.os == 'macos-latest'
+        run: cargo test
 
       # Both secrets are validated before anything is compiled. A malformed one
       # otherwise surfaces only at the signing step, after a multi-minute build.
@@ -196,7 +204,7 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       - name: Publish release
         shell: bash
@@ -227,3 +235,33 @@ jobs:
         run: gh release upload ${{ github.event.client_payload.tag }} latest.json --clobber
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Release stays green when Build fails, because the tag is already cut by
+  # then. Twice that left a version with no binaries behind it and nothing
+  # said so for a week. This is the thing that says so.
+  report-failure:
+    needs: [build, publish]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Open an issue for the failed build
+        shell: bash
+        run: |
+          TAG="${{ github.event.client_payload.tag }}"
+          TITLE="Build failed for $TAG"
+          RUN="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          existing=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "Failed again: $RUN"
+            exit 0
+          fi
+          gh issue create --title "$TITLE" --body \
+            "$TAG is tagged but its build did not finish, so the release is still a draft and no installers were attached. Nothing is being served to the updater for this version.
+
+          $RUN"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
