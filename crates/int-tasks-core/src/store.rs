@@ -697,6 +697,95 @@ impl Store {
         })
     }
 
+    /// Remove a board and everything on it.
+    ///
+    /// Returns how many tasks went with it, so the caller can say so before
+    /// asking. The last board cannot go: a store with no boards has nowhere to
+    /// put the next captured task, and silently re-seeding one would be a
+    /// stranger outcome than refusing.
+    pub fn remove_board(&self, board_id: &str) -> Result<usize> {
+        self.update(|data| {
+            if data.board(board_id).is_none() {
+                return Err(TaskError::BoardNotFound(board_id.to_string()));
+            }
+            if data.boards.len() <= 1 {
+                return Err(TaskError::LastBoard);
+            }
+            let board = data.board(board_id).expect("checked above");
+            let lists: Vec<String> = board.lists.iter().map(|list| list.id.clone()).collect();
+
+            let before = data.tasks.len();
+            data.tasks.retain(|task| !lists.contains(&task.list_id));
+            let removed = before - data.tasks.len();
+
+            data.boards.retain(|board| board.id != board_id);
+            // Keep the order contiguous, so the next board added lands after
+            // the last one rather than on top of it.
+            for (index, board) in data.boards.iter_mut().enumerate() {
+                board.order = index as u32;
+            }
+            Ok(removed)
+        })
+    }
+
+    /// Remove a list, moving whatever was in it rather than deleting it.
+    ///
+    /// Each task goes to its board's anchor list for the status it already
+    /// has, so a finished task lands in Done rather than being quietly
+    /// reopened by the column it was filed under disappearing.
+    ///
+    /// Returns how many tasks moved.
+    pub fn remove_list(&self, list_id: &str) -> Result<usize> {
+        self.update(|data| {
+            let board_id = data
+                .board_of_list(list_id)
+                .map(|board| board.id.clone())
+                .ok_or_else(|| TaskError::ListNotFound(list_id.to_string()))?;
+
+            let destinations = {
+                let board = data.board(&board_id).expect("board just found");
+                if board.is_anchor(list_id) {
+                    let name = board.list(list_id).map(|list| list.name.clone()).unwrap_or_default();
+                    return Err(TaskError::ProtectedList(name));
+                }
+                [Status::Todo, Status::Doing, Status::Done]
+                    .iter()
+                    .filter_map(|status| board.anchor(*status).map(|list| (*status, list.id.clone())))
+                    .collect::<Vec<_>>()
+            };
+
+            let mut moved = 0;
+            let mut touched: Vec<String> = Vec::new();
+            for task in &mut data.tasks {
+                if task.list_id != list_id {
+                    continue;
+                }
+                let Some((_, destination)) =
+                    destinations.iter().find(|(status, _)| *status == task.status)
+                else {
+                    continue;
+                };
+                task.list_id = destination.clone();
+                task.updated_at = now_millis();
+                moved += 1;
+                if !touched.contains(destination) {
+                    touched.push(destination.clone());
+                }
+            }
+            for list in touched {
+                data.reindex(&list);
+            }
+
+            if let Some(board) = data.boards.iter_mut().find(|board| board.id == board_id) {
+                board.lists.retain(|list| list.id != list_id);
+                for (index, list) in board.lists.iter_mut().enumerate() {
+                    list.order = index as u32;
+                }
+            }
+            Ok(moved)
+        })
+    }
+
     pub fn add_list(&self, board_id: &str, name: &str, status: Option<Status>) -> Result<List> {
         let name = name.trim();
         if name.is_empty() {
@@ -980,6 +1069,96 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("int-tasks-{}-{name}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         Store::open(&dir).expect("store")
+    }
+
+    #[test]
+    fn the_three_lists_a_board_keeps_cannot_be_removed() {
+        let store = temp_store("remove-protected");
+        let data = store.read().unwrap();
+        let board = data.boards[0].clone();
+
+        for name in ["To Do", "Doing", "Done"] {
+            let list = board.lists.iter().find(|list| list.name == name).expect(name);
+            let error = store.remove_list(&list.id).expect_err("must refuse");
+            assert!(matches!(error, TaskError::ProtectedList(_)), "{name}: {error:?}");
+        }
+
+        // And they are all still there.
+        let after = store.read().unwrap();
+        assert_eq!(after.boards[0].lists.len(), 3);
+    }
+
+    #[test]
+    fn a_list_added_beyond_the_three_can_be_removed() {
+        let store = temp_store("remove-extra");
+        let board_id = store.read().unwrap().boards[0].id.clone();
+        let extra = store.add_list(&board_id, "Blocked", None).unwrap();
+
+        assert_eq!(store.remove_list(&extra.id).unwrap(), 0);
+        let after = store.read().unwrap();
+        assert!(after.boards[0].lists.iter().all(|list| list.id != extra.id));
+        assert_eq!(after.boards[0].lists.len(), 3);
+    }
+
+    #[test]
+    fn a_second_list_with_the_same_status_is_not_an_anchor() {
+        let store = temp_store("remove-second-done");
+        let board_id = store.read().unwrap().boards[0].id.clone();
+        // A board can grow another Done without the real one losing its job.
+        let later = store.add_list(&board_id, "Done later", Some(Status::Done)).unwrap();
+
+        store.remove_list(&later.id).expect("the second Done is removable");
+        let after = store.read().unwrap();
+        assert!(after.boards[0].anchor(Status::Done).is_some());
+    }
+
+    #[test]
+    fn removing_a_list_moves_its_tasks_rather_than_deleting_them() {
+        let store = temp_store("remove-moves");
+        let board_id = store.read().unwrap().boards[0].id.clone();
+        let extra = store.add_list(&board_id, "Blocked", None).unwrap();
+
+        let open = store.capture("still to do", None, "2026-08-28").unwrap();
+        let finished = store.capture("already finished", None, "2026-08-28").unwrap();
+        store.move_task(&open.id, &extra.id, None).unwrap();
+        // Finished first: set_done files it in Done, and the point here is a
+        // completed task parked in a column of its own. A list with no status
+        // leaves the one it already has alone.
+        store.set_done(&finished.id, true).unwrap();
+        store.move_task(&finished.id, &extra.id, None).unwrap();
+
+        assert_eq!(store.remove_list(&extra.id).unwrap(), 2);
+
+        let after = store.read().unwrap();
+        let board = &after.boards[0];
+        let open_after = after.tasks.iter().find(|task| task.id == open.id).expect("kept");
+        let done_after = after.tasks.iter().find(|task| task.id == finished.id).expect("kept");
+
+        // Each one lands where its own status belongs, so finishing something
+        // is not undone by the column it sat in going away.
+        assert_eq!(Some(open_after.list_id.as_str()), board.anchor(Status::Todo).map(|l| l.id.as_str()));
+        assert_eq!(Some(done_after.list_id.as_str()), board.anchor(Status::Done).map(|l| l.id.as_str()));
+        assert_eq!(done_after.status, Status::Done);
+    }
+
+    #[test]
+    fn a_board_is_removed_with_its_tasks_and_the_last_one_stays() {
+        let store = temp_store("remove-board");
+        let second = store.add_board("Board 2").unwrap();
+        let doomed = store
+            .capture("lives on the second board", second.first_list_id(), "2026-08-28")
+            .unwrap();
+        let kept = store.capture("lives on the first", None, "2026-08-28").unwrap();
+
+        assert_eq!(store.remove_board(&second.id).unwrap(), 1);
+        let after = store.read().unwrap();
+        assert_eq!(after.boards.len(), 1);
+        assert!(after.tasks.iter().all(|task| task.id != doomed.id));
+        assert!(after.tasks.iter().any(|task| task.id == kept.id));
+
+        // The one that is left is the one the next capture needs.
+        let error = store.remove_board(&after.boards[0].id).expect_err("must refuse");
+        assert!(matches!(error, TaskError::LastBoard), "{error:?}");
     }
 
     #[test]

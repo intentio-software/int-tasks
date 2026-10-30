@@ -567,6 +567,84 @@ export class AppComponent implements OnInit, OnDestroy {
     await this.tasks.addList(board.id, name);
   }
 
+  /**
+   * The lists this board has to keep.
+   *
+   * The same rule the store enforces: the lowest-ordered list carrying each
+   * status is where a task of that status goes, so those three stay and
+   * anything added beyond them can go. This copy only decides whether to
+   * offer the control - the store is still the one that refuses, and says
+   * which list, if the two ever disagree.
+   */
+  protected readonly keptLists = computed<Set<string>>(() => {
+    const board = this.tasks.activeBoard();
+    const kept = new Set<string>();
+    if (!board) {
+      return kept;
+    }
+    for (const status of ["todo", "doing", "done"] as const) {
+      const anchor = board.lists
+        .filter((list) => list.status === status)
+        .sort((a, b) => a.order - b.order)[0];
+      if (anchor) {
+        kept.add(anchor.id);
+      }
+    }
+    return kept;
+  });
+
+  /**
+   * Remove a list. Nothing is deleted - whatever was in it moves to the list
+   * its own status belongs to - so this does not ask first.
+   */
+  async removeList(list: List, event: Event): Promise<void> {
+    event.stopPropagation();
+    const moved = await this.tasks.removeList(list.id);
+    if (moved) {
+      this.listNotice.set(
+        `${list.name} removed. ${moved} ${moved === 1 ? "task" : "tasks"} moved to the list its status belongs to.`
+      );
+    }
+  }
+
+  /** A line about the last list removal, so a silent move does not look like a loss. */
+  protected readonly listNotice = signal<string | null>(null);
+
+  /**
+   * Remove the board on screen, with whatever is on it.
+   *
+   * Asked for only when it would actually destroy something: an empty board
+   * is a click to undo by making another, and a board with tasks on it is
+   * not. The store refuses to remove the last one.
+   */
+  async removeBoard(): Promise<void> {
+    const board = this.tasks.activeBoard();
+    if (!board) {
+      return;
+    }
+    const lists = new Set(board.lists.map((list) => list.id));
+    const count = this.tasks.tasks().filter((task) => lists.has(task.list_id)).length;
+
+    if (count > 0) {
+      const { confirm } = await import("@tauri-apps/plugin-dialog");
+      const ok = await confirm(
+        `${count} ${count === 1 ? "task" : "tasks"} on ${board.name} will be deleted with it. This cannot be undone.`,
+        { title: `Remove ${board.name}?`, kind: "warning", okLabel: "Remove" }
+      );
+      if (!ok) {
+        return;
+      }
+    }
+
+    const removed = await this.tasks.removeBoard(board.id);
+    if (removed !== null) {
+      const next = this.tasks.boards()[0];
+      if (next) {
+        this.selectBoard(next.id);
+      }
+    }
+  }
+
   // -------------------------------------------------------------------------
   // chrome
   // -------------------------------------------------------------------------

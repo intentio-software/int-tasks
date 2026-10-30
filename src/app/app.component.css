@@ -321,7 +321,10 @@ button.ghost:hover {
    so three lists fill the window instead of leaving a gap, and eight scroll. */
 .column {
   flex: 1 1 15rem;
-  min-width: 13rem;
+  /* A column narrower than this cannot show a task title, so past a handful
+     of lists the board scrolls rather than squeezing every column until all
+     of them are useless. */
+  min-width: 15rem;
   max-width: 22rem;
   display: flex;
   flex-direction: column;
@@ -337,6 +340,43 @@ button.ghost:hover {
   gap: 0.45rem;
   padding: 0.6rem 0.8rem;
   border-bottom: 1px solid var(--border);
+}
+
+/* Shown on the column it belongs to rather than always: a row of crosses
+   across the top of a board invites exactly the accident it performs. */
+.column-remove {
+  margin-left: auto;
+  flex: none;
+  border: none;
+  background: transparent;
+  color: var(--ink-faint);
+  font-size: 0.7rem;
+  padding: 0.1rem 0.2rem;
+  border-radius: 6px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease;
+}
+.column:hover .column-remove,
+.column-remove:focus-visible {
+  opacity: 1;
+}
+.column-remove:hover {
+  color: var(--danger);
+  background: var(--hover);
+}
+
+.list-notice {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0.7rem 0.5rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink-muted);
+  font-size: 0.78rem;
 }
 
 .column-name {
@@ -371,6 +411,11 @@ button.ghost:hover {
 
 .card:active {
   cursor: grabbing;
+}
+
+.ghost.small.danger:hover {
+  color: var(--danger);
+  border-color: var(--danger);
 }
 
 /* Angular CDK drag feedback. */

@@ -18,6 +18,15 @@ pub enum TaskError {
     #[error("the store has no boards to put a task in")]
     NoBoards,
 
+    /// Every board keeps one list per status, because completing a task has to
+    /// put it somewhere. Those three cannot be removed; anything added beyond
+    /// them can.
+    #[error("{0} is one of the three lists a board keeps")]
+    ProtectedList(String),
+
+    #[error("the last board cannot be removed")]
+    LastBoard,
+
     /// The store exists but cannot be parsed. Reported rather than silently
     /// re-seeded, because quietly replacing someone's tasks with an empty store
     /// is worse than refusing to start.

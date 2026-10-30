@@ -213,6 +213,26 @@ impl Board {
     pub fn list(&self, id: &str) -> Option<&List> {
         self.lists.iter().find(|list| list.id == id)
     }
+
+    /// The list this board puts a task of the given status into.
+    ///
+    /// The lowest-ordered list carrying the status, so a board that has grown
+    /// a second "Done later" column still has one answer to "where does a
+    /// finished task go".
+    pub fn anchor(&self, status: Status) -> Option<&List> {
+        self.lists.iter().filter(|list| list.status == Some(status)).min_by_key(|list| list.order)
+    }
+
+    /// Whether a list is one of the three the board has to keep.
+    ///
+    /// Worked out from the lists themselves rather than recorded as a flag:
+    /// every store written before this existed would have had none, which
+    /// would have left exactly the lists this protects unprotected.
+    pub fn is_anchor(&self, list_id: &str) -> bool {
+        [Status::Todo, Status::Doing, Status::Done]
+            .iter()
+            .any(|status| self.anchor(*status).map(|list| list.id.as_str()) == Some(list_id))
+    }
 }
 
 /// A recorded stretch of focused work.

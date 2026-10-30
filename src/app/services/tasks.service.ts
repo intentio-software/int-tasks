@@ -263,6 +263,21 @@ export class TasksService {
     return this.guard(() => this.invoke<List>("add_list", { boardId, name }));
   }
 
+  /** Remove a board and everything on it. Resolves to how many tasks went. */
+  async removeBoard(boardId: string): Promise<number | null> {
+    return this.guard(() => this.invoke<number>("remove_board", { boardId }));
+  }
+
+  /**
+   * Remove a list. Resolves to how many tasks were moved out of it.
+   *
+   * The store refuses the three a board keeps, and says which one, so this
+   * does not need to know the rule to stay safe.
+   */
+  async removeList(listId: string): Promise<number | null> {
+    return this.guard(() => this.invoke<number>("remove_list", { listId }));
+  }
+
   // -------------------------------------------------------------------------
   // timer
   // -------------------------------------------------------------------------

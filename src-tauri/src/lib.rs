@@ -410,6 +410,18 @@ fn add_list(
     state.store.add_list(&board_id, &name, None).map_err(fail)
 }
 
+/// Remove a board. Returns how many tasks went with it.
+#[tauri::command]
+fn remove_board(state: State<'_, AppState>, board_id: String) -> Result<usize, String> {
+    state.store.remove_board(&board_id).map_err(fail)
+}
+
+/// Remove a list. Returns how many tasks were moved out of it first.
+#[tauri::command]
+fn remove_list(state: State<'_, AppState>, list_id: String) -> Result<usize, String> {
+    state.store.remove_list(&list_id).map_err(fail)
+}
+
 #[tauri::command]
 fn find_tasks(state: State<'_, AppState>, query_text: Option<String>, include_done: bool) -> Result<Vec<Task>, String> {
     let data = state.store.read().map_err(fail)?;
@@ -946,6 +958,8 @@ pub fn run() {
             delete_tag,
             add_board,
             add_list,
+            remove_board,
+            remove_list,
             find_tasks,
             start_timer,
             stop_timer,

@@ -21,6 +21,7 @@ import { Task, TodayReason } from "../models/task.models";
       [class.done]="task.status === 'done'"
       [class.running]="running"
       [class.menued]="menuOpen"
+      [class.compact]="compact"
       (contextmenu)="onContextMenu($event)"
     >
       <button
@@ -34,7 +35,7 @@ import { Task, TodayReason } from "../models/task.models";
       </button>
 
       <div class="body" (click)="opened.emit()">
-        <span class="title">{{ task.title }}</span>
+        <span class="title" [attr.title]="compact ? task.title : null">{{ task.title }}</span>
         <div class="meta">
           <span class="badge reason" *ngIf="reason" [ngClass]="reason">{{ reasonLabel }}</span>
           <span class="due" *ngIf="task.due" [class.overdue]="reason === 'overdue'">
@@ -69,6 +70,13 @@ import { Task, TodayReason } from "../models/task.models";
   `,
   styles: [
     `
+      /* An inline host lets the row be laid out as text rather than as the
+         block it is. It happens to survive in a wide list and does not on a
+         board card. */
+      :host {
+        display: block;
+      }
+
       .row {
         display: flex;
         align-items: flex-start;
@@ -124,7 +132,10 @@ import { Task, TodayReason } from "../models/task.models";
         color: var(--ink);
         font-size: 0.92rem;
         line-height: 1.4;
-        overflow-wrap: anywhere;
+        /* 'anywhere' breaks mid-word whenever it is convenient, which in a
+           narrow column turns "handling" into "handlin" and "g". Break a word
+           only when the word itself cannot fit. */
+        overflow-wrap: break-word;
       }
       .meta {
         display: flex;
@@ -205,6 +216,42 @@ import { Task, TodayReason } from "../models/task.models";
       .play.active {
         color: var(--accent);
       }
+
+      /* ------------------------------------------------------- board cards */
+
+      /* A card is a fifth of the width a list row has. The star and the play
+         button are worth the same space there as here, which is to say most
+         of the card, so on a card they stop taking any and appear over the
+         corner when the pointer is on it. */
+      .row.compact {
+        position: relative;
+        padding: 0.5rem 0.6rem;
+        gap: 0.5rem;
+      }
+      .row.compact .star,
+      .row.compact .play {
+        position: absolute;
+        top: 0.25rem;
+        padding: 0 0.15rem;
+        border-radius: 6px;
+        background: var(--panel-raised, var(--surface));
+      }
+      .row.compact .star {
+        right: 1.75rem;
+      }
+      .row.compact .play {
+        right: 0.3rem;
+      }
+      /* Three lines, then an ellipsis: cards that are all the same height can
+         be scanned, and the whole title is a click away in the detail panel
+         and under the pointer as a tooltip. */
+      .row.compact .title {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
     `
   ]
 })
@@ -223,6 +270,14 @@ export class TaskRowComponent {
 
   /** True while this row's context menu is showing, so it stays highlighted. */
   @Input() menuOpen = false;
+
+  /**
+   * Laid out for a board card rather than a list row.
+   *
+   * A card is narrow enough that the row's fixed chrome - check, star, play -
+   * was taking more of it than the title.
+   */
+  @Input() compact = false;
 
   onContextMenu(event: MouseEvent): void {
     event.preventDefault();

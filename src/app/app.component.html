@@ -273,7 +273,24 @@
           <ng-container *ngTemplateOutlet="projectFilterControl"></ng-container>
           <button type="button" class="ghost small" (click)="newBoard()">New board</button>
           <button type="button" class="ghost small" (click)="addList()">Add list</button>
+          @if (tasks.boards().length > 1) {
+            <button
+              type="button"
+              class="ghost small danger"
+              (click)="removeBoard()"
+              [title]="'Remove ' + (tasks.activeBoard()?.name ?? 'this board')"
+            >
+              Remove board
+            </button>
+          }
         </div>
+
+        @if (listNotice()) {
+          <p class="list-notice">
+            {{ listNotice() }}
+            <button type="button" class="ghost small" (click)="listNotice.set(null)">Dismiss</button>
+          </p>
+        }
 
         <div class="columns">
           @for (list of sortedLists(); track list.id) {
@@ -281,6 +298,17 @@
               <div class="column-head">
                 <span class="column-name">{{ list.name }}</span>
                 <span class="column-count">{{ visibleTasksIn(list.id).length }}</span>
+                @if (!keptLists().has(list.id)) {
+                  <button
+                    type="button"
+                    class="column-remove"
+                    [attr.aria-label]="'Remove ' + list.name"
+                    [title]="'Remove ' + list.name + ' (its tasks move, nothing is deleted)'"
+                    (click)="removeList(list, $event)"
+                  >
+                    <i class="pi pi-times"></i>
+                  </button>
+                }
               </div>
               <div
                 class="cards"
@@ -294,6 +322,7 @@
                   <div class="card" cdkDrag [cdkDragData]="task">
                     <app-task-row
                       [task]="task"
+                      [compact]="true"
                       [running]="isRunningFor(task)"
                       (toggled)="toggleDone(task, $event)"
                       (timerToggled)="toggleTimerFor(task)"
