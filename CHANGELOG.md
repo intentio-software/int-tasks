@@ -1,3 +1,10 @@
+# [1.30.0](https://github.com/intentio-software/int-tasks/compare/v1.29.0...v1.30.0) (2026-10-30)
+
+
+### Features
+
+* remove a board or a list, and let a card show its task ([1702107](https://github.com/intentio-software/int-tasks/commit/1702107f850b52a8a47b98b85f4a9b5ac6582448))
+
 # [1.29.0](https://github.com/intentio-software/int-tasks/compare/v1.28.0...v1.29.0) (2026-10-26)
 
 
