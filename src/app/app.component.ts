@@ -725,6 +725,18 @@ export class AppComponent implements OnInit, OnDestroy {
     return task.id;
   }
 
+  /** Whether anything is open over the main window. */
+  private modalOpen(): boolean {
+    return Boolean(
+      this.unassignedSession() ||
+        this.editing() ||
+        this.labelsOpen() ||
+        this.aboutOpen() ||
+        this.shortcutsOpen() ||
+        this.taskMenu()
+    );
+  }
+
   focusCapture(): void {
     const input = document.getElementById("capture") as HTMLInputElement | null;
     input?.focus();
@@ -748,7 +760,13 @@ export class AppComponent implements OnInit, OnDestroy {
       return;
     }
     // A bare keystroke should land in the capture box, so a thought can be
-    // typed without reaching for the mouse first.
+    // typed without reaching for the mouse first. Not while something is open
+    // over the top of it, though: a dialog that loses focus for any reason
+    // would otherwise have the next letter typed into the box behind it, and
+    // the cursor would follow the letter.
+    if (this.modalOpen()) {
+      return;
+    }
     const typing = (event.target as HTMLElement | null)?.closest("input, textarea");
     if (!typing && !event.metaKey && !event.ctrlKey && event.key.length === 1) {
       this.focusCapture();

@@ -1,9 +1,12 @@
 import {
+  AfterViewInit,
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
   EventEmitter,
   Input,
   Output,
+  ViewChild,
   computed,
   inject,
   signal
@@ -37,15 +40,24 @@ import { TasksService } from "../services/tasks.service";
           </div>
         </header>
 
-        @if (candidates().length) {
-          <input
-            class="filter"
-            type="text"
-            placeholder="Find a task, or type a new one…"
-            [(ngModel)]="query"
-            (ngModelChange)="queryChanged($event)"
-            autofocus
-          />
+        <!-- One box, never rebuilt.
+             The input used to live inside the branch that asked whether
+             anything still matched, so the keystroke that narrowed the list
+             to nothing destroyed the element being typed into and built a
+             different one. Focus fell to the body, and the next keystroke was
+             picked up by the window handler that routes bare typing into the
+             capture bar - behind this dialog. -->
+        <input
+          #box
+          class="filter"
+          type="text"
+          [placeholder]="hasOpen() ? 'Find a task, or type a new one…' : 'What was it about?'"
+          [(ngModel)]="query"
+          (ngModelChange)="queryChanged($event)"
+          (keydown.enter)="query.trim() && created.emit(query.trim())"
+        />
+
+        @if (typed().trim() || candidates().length) {
           <ul class="list">
             <!-- What you typed, as a new task. First rather than last: when
                  nothing matches, this is the answer, and having to look past
@@ -82,30 +94,10 @@ import { TasksService } from "../services/tasks.service";
             }
           </ul>
         } @else {
-          <input
-            class="filter"
-            type="text"
-            placeholder="What was it about?"
-            [(ngModel)]="query"
-            (ngModelChange)="queryChanged($event)"
-            (keydown.enter)="query.trim() && created.emit(query.trim())"
-            autofocus
-          />
-          @if (query.trim()) {
-            <ul class="list">
-              <li>
-                <button type="button" class="make" (click)="created.emit(query.trim())">
-                  <span class="title">Create <strong>{{ captured().title }}</strong></span>
-                  <span class="made"><span class="chip time">+{{ minutes }}m</span></span>
-                </button>
-              </li>
-            </ul>
-          } @else {
-            <p class="empty">
-              Nothing open to attribute it to. Type what it was about and it becomes a task with
-              this time already on it, or leave it unattributed — which is a real answer.
-            </p>
-          }
+          <p class="empty">
+            Nothing open to attribute it to. Type what it was about and it becomes a task with
+            this time already on it, or leave it unattributed — which is a real answer.
+          </p>
         }
 
         <footer>
@@ -265,7 +257,7 @@ import { TasksService } from "../services/tasks.service";
     `
   ]
 })
-export class AssignSessionComponent {
+export class AssignSessionComponent implements AfterViewInit {
   @Input({ required: true }) session!: Session;
   /** Open tasks, most recently worked first. */
   @Input() tasks: Task[] = [];
@@ -287,6 +279,15 @@ export class AssignSessionComponent {
   get minutes(): number {
     return Math.max(1, Math.round(this.session.seconds / 60));
   }
+
+  /**
+   * Whether there is anything open at all, which is a different question from
+   * whether anything matches what has been typed so far. Asking the second one
+   * where the first was meant told somebody with forty open tasks that there
+   * was "nothing open to attribute it to" the moment they typed a word none of
+   * them contained.
+   */
+  readonly hasOpen = computed(() => this.tasks.some((task) => task.status !== "done"));
 
   readonly candidates = computed(() => {
     const needle = this.filter().trim().toLowerCase();
@@ -314,6 +315,20 @@ export class AssignSessionComponent {
    * something the capture does not deliver.
    */
   readonly captured = signal<CapturePreview>({ title: "", tags: [] });
+
+  @ViewChild("box") private box?: ElementRef<HTMLInputElement>;
+
+  /**
+   * Put the cursor in the box.
+   *
+   * Explicitly rather than with the autofocus attribute, which the browser
+   * applies when it parses a document and not to an element handed to it
+   * afterwards - which is every element in a dialog that opens when a session
+   * ends.
+   */
+  ngAfterViewInit(): void {
+    this.box?.nativeElement.focus();
+  }
 
   queryChanged(value: string): void {
     this.filter.set(value);
