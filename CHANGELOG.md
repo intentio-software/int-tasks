@@ -1,3 +1,10 @@
+## [1.30.1](https://github.com/intentio-software/int-tasks/compare/v1.30.0...v1.30.1) (2026-11-11)
+
+
+### Bug Fixes
+
+* keep the cursor in the box when the search stops matching ([3fa56bf](https://github.com/intentio-software/int-tasks/commit/3fa56bf9bffa4bb8ce3b896eadfcf518f6cae77c))
+
 # [1.30.0](https://github.com/intentio-software/int-tasks/compare/v1.29.0...v1.30.0) (2026-10-30)
 
 
